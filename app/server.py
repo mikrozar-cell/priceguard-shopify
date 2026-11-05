@@ -322,9 +322,7 @@ def verify_oauth_query_hmac(query_params: Dict[str, str]) -> bool:
 # ---------------------------------------------------------------------------
 @app.get("/", response_class=HTMLResponse)
 async def root_ui(request: Request, shop: Optional[str] = Query(default=None)) -> Any:
-    if not shop:
-        return RedirectResponse(url="/?shop=demo-store.myshopify.com")
-    if shop.endswith(".myshopify.com") and shop != "demo-store.myshopify.com":
+    if shop and shop.endswith(".myshopify.com") and shop != "demo-store.myshopify.com":
         shop_data = get_shop(shop)
         if not shop_data or not shop_data.get("access_token"):
             auth_url = f"/auth?shop={urllib.parse.quote(shop)}"
