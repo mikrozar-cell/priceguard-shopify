@@ -48,8 +48,8 @@ PriceGuard simplifies running storewide or collection flash sales using native S
 ---
 
 ## 6. Links & Reviewer Instructions
-* **Privacy Policy URL:** `https://priceguard-app.onrender.com/privacy`
-* **Support URL / Email:** `mikrozar@gmail.com` / `https://priceguard-app.onrender.com/support`
+* **Privacy Policy URL:** `https://priceguard-shopify.onrender.com/privacy`
+* **Support URL / Email:** `mikrozar@gmail.com` / `https://priceguard-shopify.onrender.com/support`
 * **Protected Customer Data:** `No` (`Doesn't need access to protected customer data` — используются только права `read_products,write_products`).
 * **Testing Instructions for Reviewer:**
 ```text
