@@ -1,9 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="shopify-api-key" content="__SHOPIFY_API_KEY__" />
+  <meta name="shopify-api-key" content="29501bda2d166fbcb917e600b79e168c" />
   <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
   <title>PriceGuard — Flash Sale & Compare-At-Price Manager</title>
   <style>
@@ -24,7 +25,11 @@
       --purple-bg: #f3f0ff;
       --purple-text: #5c3cfa;
     }
-    * { box-sizing: border-box; }
+
+    * {
+      box-sizing: border-box;
+    }
+
     body {
       margin: 0;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -32,6 +37,7 @@
       color: var(--text);
       font-size: 14px;
     }
+
     .topbar {
       background: #1a1c1d;
       color: #fff;
@@ -42,6 +48,7 @@
       flex-wrap: wrap;
       gap: 12px;
     }
+
     .brand {
       display: flex;
       align-items: center;
@@ -49,6 +56,7 @@
       font-weight: 600;
       font-size: 15px;
     }
+
     .brand-icon {
       width: 28px;
       height: 28px;
@@ -61,12 +69,14 @@
       font-size: 13px;
       color: #fff;
     }
+
     .topbar-pills {
       display: flex;
       align-items: center;
       gap: 8px;
       flex-wrap: wrap;
     }
+
     .pill {
       padding: 4px 10px;
       border-radius: 999px;
@@ -75,27 +85,32 @@
       background: #2c2f32;
       color: #e3e5e7;
     }
+
     .pill--active {
       background: #108043;
       color: #fff;
     }
+
     .pill--pro {
       background: #f4f6f8;
       color: #202223;
     }
+
     .container {
       max-width: 1220px;
       margin: 20px auto;
       padding: 0 20px 40px;
     }
+
     .header-card {
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 10px;
       padding: 20px 24px;
       margin-bottom: 16px;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
     }
+
     .header-top {
       display: flex;
       justify-content: space-between;
@@ -103,16 +118,19 @@
       flex-wrap: wrap;
       gap: 16px;
     }
+
     h1 {
       margin: 0 0 6px 0;
       font-size: 20px;
       font-weight: 700;
     }
+
     .subtitle {
       margin: 0;
       color: var(--subdued);
       font-size: 13.5px;
     }
+
     .action-bar {
       display: flex;
       align-items: center;
@@ -120,6 +138,7 @@
       flex-wrap: wrap;
       margin-top: 16px;
     }
+
     .btn {
       display: inline-flex;
       align-items: center;
@@ -134,31 +153,38 @@
       color: var(--text);
       transition: all 0.15s ease;
     }
+
     .btn:hover:not(:disabled) {
       background: #f6f6f7;
     }
+
     .btn:disabled {
       opacity: 0.55;
       cursor: not-allowed;
     }
+
     .btn--primary {
       background: var(--primary);
       border-color: var(--primary);
       color: #fff;
     }
+
     .btn--primary:hover:not(:disabled) {
       background: var(--primary-hover);
       border-color: var(--primary-hover);
       color: #fff;
     }
+
     .btn--danger-outline {
       border-color: #f3b3a6;
       color: #b92500;
       background: #fff;
     }
+
     .btn--danger-outline:hover:not(:disabled) {
       background: var(--danger-bg);
     }
+
     .banner {
       display: none;
       margin-top: 14px;
@@ -170,6 +196,7 @@
       color: var(--success-text);
       border: 1px solid #b3d9a8;
     }
+
     .rules-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -180,12 +207,14 @@
       padding: 18px 20px;
       margin-bottom: 16px;
     }
+
     .field-box {
       border: 1px solid #e4e5e7;
       border-radius: 8px;
       padding: 12px 14px;
       background: #fafbfb;
     }
+
     .field-label {
       display: block;
       font-size: 12px;
@@ -193,12 +222,16 @@
       color: #4a4f55;
       margin-bottom: 6px;
     }
+
     .field-sub {
       font-size: 11.5px;
       color: var(--subdued);
       margin-top: 5px;
     }
-    select, input[type="number"], input[type="text"] {
+
+    select,
+    input[type="number"],
+    input[type="text"] {
       width: 100%;
       padding: 7px 10px;
       border: 1px solid #c9cccf;
@@ -207,17 +240,20 @@
       background: #fff;
       color: var(--text);
     }
+
     .inline-inputs {
       display: flex;
       gap: 8px;
       align-items: center;
     }
+
     .preset-row {
       display: flex;
       gap: 6px;
       margin-top: 8px;
       flex-wrap: wrap;
     }
+
     .preset-btn {
       padding: 3px 8px;
       font-size: 11.5px;
@@ -227,11 +263,13 @@
       background: #fff;
       cursor: pointer;
     }
+
     .preset-btn:hover {
       background: #eef9f6;
       border-color: var(--primary);
       color: var(--primary);
     }
+
     .check-row {
       display: flex;
       align-items: flex-start;
@@ -240,19 +278,22 @@
       font-weight: 600;
       cursor: pointer;
     }
+
     .check-row input {
       margin-top: 2px;
       accent-color: var(--primary);
       width: 15px;
       height: 15px;
     }
+
     .table-card {
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 10px;
       overflow: hidden;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
     }
+
     .table-toolbar {
       padding: 12px 18px;
       border-bottom: 1px solid var(--border);
@@ -263,12 +304,14 @@
       gap: 10px;
       background: #fafbfb;
     }
+
     .toolbar-left {
       display: flex;
       align-items: center;
       gap: 8px;
       flex-wrap: wrap;
     }
+
     .btn-sm {
       padding: 5px 10px;
       font-size: 12px;
@@ -278,12 +321,17 @@
       cursor: pointer;
       font-weight: 600;
     }
-    .btn-sm:hover { background: #f1f2f4; }
+
+    .btn-sm:hover {
+      background: #f1f2f4;
+    }
+
     table {
       width: 100%;
       border-collapse: collapse;
       text-align: left;
     }
+
     th {
       background: #f6f6f7;
       padding: 11px 14px;
@@ -294,18 +342,27 @@
       text-transform: uppercase;
       letter-spacing: 0.02em;
     }
+
     td {
       padding: 12px 14px;
       border-bottom: 1px solid #eceef0;
       vertical-align: middle;
     }
-    tr:last-child td { border-bottom: none; }
-    tr.row--sale { background: #f8fdfb; }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tr.row--sale {
+      background: #f8fdfb;
+    }
+
     .prod-cell {
       display: flex;
       align-items: center;
       gap: 11px;
     }
+
     .prod-avatar {
       width: 36px;
       height: 36px;
@@ -318,25 +375,30 @@
       justify-content: center;
       flex-shrink: 0;
     }
+
     .prod-title {
       font-weight: 600;
       font-size: 13.5px;
       margin-bottom: 2px;
     }
+
     .prod-meta {
       font-size: 12px;
       color: var(--subdued);
     }
+
     .price-current {
       font-weight: 700;
       font-size: 14px;
     }
+
     .price-strike {
       text-decoration: line-through;
       color: #8c9196;
       font-size: 12.5px;
       margin-left: 6px;
     }
+
     .badge {
       display: inline-flex;
       align-items: center;
@@ -346,22 +408,27 @@
       font-weight: 600;
       white-space: nowrap;
     }
+
     .badge--sale {
       background: var(--success-bg);
       color: var(--success-text);
     }
+
     .badge--preview {
       background: var(--purple-bg);
       color: var(--purple-text);
     }
+
     .badge--floor {
       background: var(--warning-bg);
       color: var(--warning-text);
     }
+
     .badge--skip {
       background: #eef0f2;
       color: #5c5f62;
     }
+
     .tag-chip {
       display: inline-block;
       padding: 2px 7px;
@@ -372,12 +439,14 @@
       color: #303234;
       font-weight: 500;
     }
+
     .tag-chip--sale {
       background: #d4f5e9;
       color: #006e52;
       font-weight: 700;
       border: 1px solid #95e0c5;
     }
+
     .logs-card {
       margin-top: 16px;
       background: var(--surface);
@@ -385,6 +454,7 @@
       border-radius: 10px;
       padding: 14px 18px;
     }
+
     .logs-title {
       font-size: 12.5px;
       font-weight: 700;
@@ -392,15 +462,20 @@
       text-transform: uppercase;
       margin-bottom: 8px;
     }
+
     .log-item {
       font-size: 12.5px;
       padding: 5px 0;
       border-bottom: 1px dashed #eceef0;
       color: #303234;
     }
-    .log-item:last-child { border-bottom: none; }
+
+    .log-item:last-child {
+      border-bottom: none;
+    }
   </style>
 </head>
+
 <body>
   <div class="topbar">
     <div class="brand">
@@ -420,7 +495,8 @@
         <div>
           <h1>Flash Sale &amp; Bulk Compare-At-Price Manager</h1>
           <p class="subtitle">
-            Launch percentage or fixed-amount sales with strikethrough Compare-at-Prices, psychological rounding (.99 / .95), margin floor guard, and 1-Click lossless price rollback.
+            Launch percentage or fixed-amount sales with strikethrough Compare-at-Prices, psychological rounding (.99 /
+            .95), margin floor guard, and 1-Click lossless price rollback.
           </p>
         </div>
       </div>
@@ -454,7 +530,8 @@
             <option value="percentage">Percentage (% Off)</option>
             <option value="fixed">Fixed Amount (€ Off)</option>
           </select>
-          <input type="number" id="discountValue" value="20" min="1" max="95" step="1" oninput="triggerPreview()" style="width: 44%;" />
+          <input type="number" id="discountValue" value="20" min="1" max="95" step="1" oninput="triggerPreview()"
+            style="width: 44%;" />
         </div>
         <div class="preset-row">
           <button type="button" class="preset-btn" onclick="setPreset('percentage', 15)">-15%</button>
@@ -474,8 +551,10 @@
           <option value="exact">Exact decimal calculation</option>
         </select>
         <div class="field-sub" style="margin-top: 8px;">
-          <label class="field-label" for="minPriceFloor" style="margin-bottom:3px;">Margin Floor Guard (Min Price €)</label>
-          <input type="number" id="minPriceFloor" value="0" min="0" step="1" oninput="triggerPreview()" placeholder="0 = no minimum" />
+          <label class="field-label" for="minPriceFloor" style="margin-bottom:3px;">Margin Floor Guard (Min Price
+            €)</label>
+          <input type="number" id="minPriceFloor" value="0" min="0" step="1" oninput="triggerPreview()"
+            placeholder="0 = no minimum" />
         </div>
       </div>
 
@@ -485,7 +564,8 @@
           <span>Skip items already on sale</span>
         </label>
         <div class="field-sub" style="margin-bottom: 10px;">
-          Protects existing clearance items from changing, or leave unchecked to recalculate cleanly from anchor price without double-discounting.
+          Protects existing clearance items from changing, or leave unchecked to recalculate cleanly from anchor price
+          without double-discounting.
         </div>
 
         <label class="check-row">
@@ -493,7 +573,8 @@
           <span>Auto-tag discounted products</span>
         </label>
         <div style="margin-top: 6px;">
-          <input type="text" id="saleTag" value="on-sale" oninput="triggerPreview()" placeholder="Tag name (e.g. on-sale)" />
+          <input type="text" id="saleTag" value="on-sale" oninput="triggerPreview()"
+            placeholder="Tag name (e.g. on-sale)" />
         </div>
       </div>
     </div>
@@ -513,7 +594,8 @@
       <table>
         <thead>
           <tr>
-            <th style="width: 38px;"><input type="checkbox" id="masterCheck" checked onchange="selectAll(this.checked)" /></th>
+            <th style="width: 38px;"><input type="checkbox" id="masterCheck" checked
+                onchange="selectAll(this.checked)" /></th>
             <th>Product &amp; SKU</th>
             <th>Pre-Sale Snapshot (Original)</th>
             <th>Live Shopify Price</th>
@@ -797,4 +879,5 @@
     })();
   </script>
 </body>
+
 </html>

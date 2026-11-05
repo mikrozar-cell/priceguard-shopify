@@ -30,6 +30,8 @@ client = TestClient(app)
 
 
 def test_embedded_app_bridge_head():
+    from app.database import upsert_shop
+    upsert_shop("sortflow-dev-store.myshopify.com", "fake_access_token")
     res = client.get("/?shop=sortflow-dev-store.myshopify.com")
     assert res.status_code == 200
     html = res.text
@@ -138,7 +140,8 @@ def test_gdpr_webhooks_hmac():
     assert r2.status_code == 401
 
     # Valid HMAC -> 200
-    secret = os.environ.get("SHOPIFY_API_SECRET", "") or "priceguard_fallback_secret"
+    from app.server import SHOPIFY_API_SECRET as server_secret
+    secret = server_secret or "priceguard_fallback_secret"
     digest = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).digest()
     valid_sig = base64.b64encode(digest).decode("utf-8")
     r3 = client.post(
@@ -158,3 +161,4 @@ if __name__ == "__main__":
     test_skip_already_on_sale_and_margin_floor()
     test_gdpr_webhooks_hmac()
     print("ALL PRICEGUARD TESTS PASSED 100%!")
+
