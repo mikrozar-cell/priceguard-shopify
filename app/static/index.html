@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="shopify-api-key" content="__SHOPIFY_API_KEY__" />
+  <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
+  <title>PriceGuard — Flash Sale & Compare-At-Price Manager</title>
+  <style>
+    :root {
+      --bg: #f1f2f4;
+      --surface: #ffffff;
+      --border: #e1e3e5;
+      --text: #202223;
+      --subdued: #6d7175;
+      --primary: #008060;
+      --primary-hover: #006e52;
+      --danger: #d82c0d;
+      --danger-bg: #fff4f4;
+      --warning-bg: #fff8e6;
+      --warning-text: #8a6116;
+      --success-bg: #e3f1df;
+      --success-text: #108043;
+      --purple-bg: #f3f0ff;
+      --purple-text: #5c3cfa;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+    }
+    .topbar {
+      background: #1a1c1d;
+      color: #fff;
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 600;
+      font-size: 15px;
+    }
+    .brand-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      background: linear-gradient(135deg, #008060, #00a47c);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 13px;
+      color: #fff;
+    }
+    .topbar-pills {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .pill {
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      background: #2c2f32;
+      color: #e3e5e7;
+    }
+    .pill--active {
+      background: #108043;
+      color: #fff;
+    }
+    .pill--pro {
+      background: #f4f6f8;
+      color: #202223;
+    }
+    .container {
+      max-width: 1220px;
+      margin: 20px auto;
+      padding: 0 20px 40px;
+    }
+    .header-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px 24px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+    .header-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    h1 {
+      margin: 0 0 6px 0;
+      font-size: 20px;
+      font-weight: 700;
+    }
+    .subtitle {
+      margin: 0;
+      color: var(--subdued);
+      font-size: 13.5px;
+    }
+    .action-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 16px;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 9px 16px;
+      border-radius: 6px;
+      font-size: 13.5px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid #c9cccf;
+      background: #fff;
+      color: var(--text);
+      transition: all 0.15s ease;
+    }
+    .btn:hover:not(:disabled) {
+      background: #f6f6f7;
+    }
+    .btn:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+    .btn--primary {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #fff;
+    }
+    .btn--primary:hover:not(:disabled) {
+      background: var(--primary-hover);
+      border-color: var(--primary-hover);
+      color: #fff;
+    }
+    .btn--danger-outline {
+      border-color: #f3b3a6;
+      color: #b92500;
+      background: #fff;
+    }
+    .btn--danger-outline:hover:not(:disabled) {
+      background: var(--danger-bg);
+    }
+    .banner {
+      display: none;
+      margin-top: 14px;
+      padding: 11px 14px;
+      border-radius: 8px;
+      font-size: 13.5px;
+      font-weight: 500;
+      background: var(--success-bg);
+      color: var(--success-text);
+      border: 1px solid #b3d9a8;
+    }
+    .rules-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px 20px;
+      margin-bottom: 16px;
+    }
+    .field-box {
+      border: 1px solid #e4e5e7;
+      border-radius: 8px;
+      padding: 12px 14px;
+      background: #fafbfb;
+    }
+    .field-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: #4a4f55;
+      margin-bottom: 6px;
+    }
+    .field-sub {
+      font-size: 11.5px;
+      color: var(--subdued);
+      margin-top: 5px;
+    }
+    select, input[type="number"], input[type="text"] {
+      width: 100%;
+      padding: 7px 10px;
+      border: 1px solid #c9cccf;
+      border-radius: 6px;
+      font-size: 13.5px;
+      background: #fff;
+      color: var(--text);
+    }
+    .inline-inputs {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .preset-row {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+    .preset-btn {
+      padding: 3px 8px;
+      font-size: 11.5px;
+      font-weight: 600;
+      border-radius: 5px;
+      border: 1px solid #d2d5d8;
+      background: #fff;
+      cursor: pointer;
+    }
+    .preset-btn:hover {
+      background: #eef9f6;
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+    .check-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .check-row input {
+      margin-top: 2px;
+      accent-color: var(--primary);
+      width: 15px;
+      height: 15px;
+    }
+    .table-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+    .table-toolbar {
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      background: #fafbfb;
+    }
+    .toolbar-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .btn-sm {
+      padding: 5px 10px;
+      font-size: 12px;
+      border-radius: 5px;
+      border: 1px solid #c9cccf;
+      background: #fff;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .btn-sm:hover { background: #f1f2f4; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+    }
+    th {
+      background: #f6f6f7;
+      padding: 11px 14px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #4a4f55;
+      border-bottom: 1px solid var(--border);
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+    td {
+      padding: 12px 14px;
+      border-bottom: 1px solid #eceef0;
+      vertical-align: middle;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr.row--sale { background: #f8fdfb; }
+    .prod-cell {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+    }
+    .prod-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 7px;
+      color: #fff;
+      font-weight: 700;
+      font-size: 13px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .prod-title {
+      font-weight: 600;
+      font-size: 13.5px;
+      margin-bottom: 2px;
+    }
+    .prod-meta {
+      font-size: 12px;
+      color: var(--subdued);
+    }
+    .price-current {
+      font-weight: 700;
+      font-size: 14px;
+    }
+    .price-strike {
+      text-decoration: line-through;
+      color: #8c9196;
+      font-size: 12.5px;
+      margin-left: 6px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 11.5px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .badge--sale {
+      background: var(--success-bg);
+      color: var(--success-text);
+    }
+    .badge--preview {
+      background: var(--purple-bg);
+      color: var(--purple-text);
+    }
+    .badge--floor {
+      background: var(--warning-bg);
+      color: var(--warning-text);
+    }
+    .badge--skip {
+      background: #eef0f2;
+      color: #5c5f62;
+    }
+    .tag-chip {
+      display: inline-block;
+      padding: 2px 7px;
+      margin: 2px 3px 2px 0;
+      border-radius: 4px;
+      font-size: 11px;
+      background: #eef0f2;
+      color: #303234;
+      font-weight: 500;
+    }
+    .tag-chip--sale {
+      background: #d4f5e9;
+      color: #006e52;
+      font-weight: 700;
+      border: 1px solid #95e0c5;
+    }
+    .logs-card {
+      margin-top: 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 18px;
+    }
+    .logs-title {
+      font-size: 12.5px;
+      font-weight: 700;
+      color: var(--subdued);
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .log-item {
+      font-size: 12.5px;
+      padding: 5px 0;
+      border-bottom: 1px dashed #eceef0;
+      color: #303234;
+    }
+    .log-item:last-child { border-bottom: none; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">
+      <span class="brand-icon">PG</span>
+      <span>PriceGuard — Flash Sale &amp; Compare-At-Price Manager</span>
+    </div>
+    <div class="topbar-pills">
+      <span class="pill" id="shopPill">Shop: sortflow-dev-store.myshopify.com</span>
+      <span class="pill" id="campaignStatusPill">Status: Original Prices Active</span>
+      <span class="pill pill--pro">Snapshot Rollback Shield Active</span>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="header-card">
+      <div class="header-top">
+        <div>
+          <h1>Flash Sale &amp; Bulk Compare-At-Price Manager</h1>
+          <p class="subtitle">
+            Launch percentage or fixed-amount sales with strikethrough Compare-at-Prices, psychological rounding (.99 / .95), margin floor guard, and 1-Click lossless price rollback.
+          </p>
+        </div>
+      </div>
+
+      <div class="action-bar">
+        <button class="btn btn--danger-outline" id="rollbackBtn" onclick="rollbackSale()">
+          &#8634; 1-Click Revert to Original Prices
+        </button>
+        <button class="btn btn--primary" id="applyBtn" onclick="applySale()">
+          &#10003; Apply Flash Sale &amp; Sync to Shopify
+        </button>
+        <button class="btn" onclick="exportCsv()">
+          &#8681; Export Price Snapshot CSV
+        </button>
+      </div>
+
+      <div class="banner" id="statusBanner"></div>
+    </div>
+
+    <div class="rules-grid">
+      <div class="field-box">
+        <label class="field-label" for="collectionSelect">1. Select Shopify Collection</label>
+        <select id="collectionSelect" onchange="onCollectionChange()"></select>
+        <div class="field-sub">Each collection keeps its own independent pre-sale price snapshot.</div>
+      </div>
+
+      <div class="field-box">
+        <label class="field-label">2. Discount Rule &amp; Value</label>
+        <div class="inline-inputs">
+          <select id="discountType" onchange="triggerPreview()" style="width: 56%;">
+            <option value="percentage">Percentage (% Off)</option>
+            <option value="fixed">Fixed Amount (€ Off)</option>
+          </select>
+          <input type="number" id="discountValue" value="20" min="1" max="95" step="1" oninput="triggerPreview()" style="width: 44%;" />
+        </div>
+        <div class="preset-row">
+          <button type="button" class="preset-btn" onclick="setPreset('percentage', 15)">-15%</button>
+          <button type="button" class="preset-btn" onclick="setPreset('percentage', 20)">-20%</button>
+          <button type="button" class="preset-btn" onclick="setPreset('percentage', 30)">-30%</button>
+          <button type="button" class="preset-btn" onclick="setPreset('percentage', 50)">-50%</button>
+          <button type="button" class="preset-btn" onclick="setPreset('fixed', 10)">-€10</button>
+        </div>
+      </div>
+
+      <div class="field-box">
+        <label class="field-label" for="roundingMode">3. Psychological Price Rounding</label>
+        <select id="roundingMode" onchange="triggerPreview()">
+          <option value="99">Round cents to .99 (e.g. €70.99)</option>
+          <option value="95">Round cents to .95 (e.g. €70.95)</option>
+          <option value="00">Whole integer .00 (e.g. €71.00)</option>
+          <option value="exact">Exact decimal calculation</option>
+        </select>
+        <div class="field-sub" style="margin-top: 8px;">
+          <label class="field-label" for="minPriceFloor" style="margin-bottom:3px;">Margin Floor Guard (Min Price €)</label>
+          <input type="number" id="minPriceFloor" value="0" min="0" step="1" oninput="triggerPreview()" placeholder="0 = no minimum" />
+        </div>
+      </div>
+
+      <div class="field-box">
+        <label class="check-row">
+          <input type="checkbox" id="skipAlreadyOnSale" onchange="triggerPreview()" />
+          <span>Skip items already on sale</span>
+        </label>
+        <div class="field-sub" style="margin-bottom: 10px;">
+          Protects existing clearance items from changing, or leave unchecked to recalculate cleanly from anchor price without double-discounting.
+        </div>
+
+        <label class="check-row">
+          <input type="checkbox" id="autoTagSale" checked onchange="triggerPreview()" />
+          <span>Auto-tag discounted products</span>
+        </label>
+        <div style="margin-top: 6px;">
+          <input type="text" id="saleTag" value="on-sale" oninput="triggerPreview()" placeholder="Tag name (e.g. on-sale)" />
+        </div>
+      </div>
+    </div>
+
+    <div class="table-card">
+      <div class="table-toolbar">
+        <div class="toolbar-left">
+          <button type="button" class="btn-sm" onclick="selectAll(true)">Select All</button>
+          <button type="button" class="btn-sm" onclick="selectAll(false)">Clear Selection</button>
+          <span id="selectionSummary" style="font-size:12.5px;color:var(--subdued);margin-left:6px;"></span>
+        </div>
+        <div style="font-size:12.5px;color:var(--subdued);">
+          Anti-Double-Discounting Engine: Discounts always compute from Original Snapshot Anchor Price
+        </div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 38px;"><input type="checkbox" id="masterCheck" checked onchange="selectAll(this.checked)" /></th>
+            <th>Product &amp; SKU</th>
+            <th>Pre-Sale Snapshot (Original)</th>
+            <th>Live Shopify Price</th>
+            <th>Flash Sale Preview (Before &rarr; After)</th>
+            <th>Shopify Tags</th>
+          </tr>
+        </thead>
+        <tbody id="productTableBody"></tbody>
+      </table>
+    </div>
+
+    <div class="logs-card">
+      <div class="logs-title">Price Snapshot &amp; Sync Activity Log</div>
+      <div id="auditLogList">
+        <div class="log-item">Immutable pre-sale snapshot active and ready.</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const currentShop = urlParams.get("shop") || "sortflow-dev-store.myshopify.com";
+    document.getElementById("shopPill").textContent = "Shop: " + currentShop;
+
+    let demoSessionId = sessionStorage.getItem("pg_demo_session");
+    if (!demoSessionId) {
+      demoSessionId = "pg_" + Math.random().toString(36).substring(2, 10) + "_" + Date.now();
+      sessionStorage.setItem("pg_demo_session", demoSessionId);
+    }
+
+    let currentCollectionId = "col-summer-2026";
+    let currentProducts = [];
+    let selectedProductIds = new Set();
+
+    async function authFetch(url, options = {}) {
+      const headers = new Headers(options.headers || {});
+      headers.set("X-Demo-Session", demoSessionId);
+      if (!headers.has("Content-Type") && options.body) {
+        headers.set("Content-Type", "application/json");
+      }
+      if (window.shopify && typeof window.shopify.idToken === "function") {
+        try {
+          const token = await window.shopify.idToken();
+          if (token) {
+            headers.set("Authorization", "Bearer " + token);
+          }
+        } catch (err) {
+          console.warn("App Bridge idToken fallback:", err);
+        }
+      }
+      return fetch(url, { ...options, headers });
+    }
+
+    function showBanner(msg) {
+      const el = document.getElementById("statusBanner");
+      el.textContent = msg;
+      el.style.display = "block";
+    }
+
+    function readRulesFromForm() {
+      return {
+        discount_type: document.getElementById("discountType").value,
+        discount_value: parseFloat(document.getElementById("discountValue").value || "20"),
+        rounding_mode: document.getElementById("roundingMode").value,
+        min_price_floor: parseFloat(document.getElementById("minPriceFloor").value || "0"),
+        skip_already_on_sale: document.getElementById("skipAlreadyOnSale").checked,
+        auto_tag_sale: document.getElementById("autoTagSale").checked,
+        sale_tag: document.getElementById("saleTag").value || "on-sale",
+        selected_product_ids: Array.from(selectedProductIds),
+      };
+    }
+
+    function populateRulesForm(rules) {
+      if (!rules) return;
+      document.getElementById("discountType").value = rules.discount_type || "percentage";
+      document.getElementById("discountValue").value = rules.discount_value ?? 20;
+      document.getElementById("roundingMode").value = rules.rounding_mode || "99";
+      document.getElementById("minPriceFloor").value = rules.min_price_floor ?? 0;
+      document.getElementById("skipAlreadyOnSale").checked = !!rules.skip_already_on_sale;
+      document.getElementById("autoTagSale").checked = rules.auto_tag_sale !== false;
+      document.getElementById("saleTag").value = rules.sale_tag || "on-sale";
+
+      const pill = document.getElementById("campaignStatusPill");
+      if (rules.is_active) {
+        pill.textContent = "Status: Flash Sale Active on Shopify";
+        pill.className = "pill pill--active";
+      } else {
+        pill.textContent = "Status: Original Prices Active";
+        pill.className = "pill";
+      }
+    }
+
+    function renderAuditLogs(logs) {
+      const container = document.getElementById("auditLogList");
+      if (!logs || logs.length === 0) {
+        container.innerHTML = '<div class="log-item">Immutable pre-sale snapshot ready. No changes applied yet.</div>';
+        return;
+      }
+      container.innerHTML = logs.map(l => {
+        const dt = new Date(l.created_at * 1000).toLocaleTimeString();
+        return `<div class="log-item"><strong>[${dt}] ${l.action}:</strong> ${l.details}</div>`;
+      }).join("");
+    }
+
+    function renderProducts(products) {
+      currentProducts = products;
+      const tbody = document.getElementById("productTableBody");
+      const saleTag = (document.getElementById("saleTag").value || "on-sale").trim();
+
+      document.getElementById("selectionSummary").textContent =
+        `${selectedProductIds.size} of ${products.length} products selected`;
+
+      tbody.innerHTML = products.map(p => {
+        const isChecked = selectedProductIds.has(p.id);
+        const origCmp = p.original_compare_at_price
+          ? `<span class="price-strike">€${Number(p.original_compare_at_price).toFixed(2)}</span>`
+          : "";
+        const liveCmp = p.compare_at_price
+          ? `<span class="price-strike">€${Number(p.compare_at_price).toFixed(2)}</span>`
+          : "";
+        const liveBadge = p.on_sale
+          ? `<span class="badge badge--sale" style="margin-left:6px;">Live Sale</span>`
+          : "";
+
+        let previewHtml = "";
+        if (p.preview_skipped) {
+          previewHtml = `<span class="badge badge--skip">${p.skip_reason || "Skipped"}</span>`;
+        } else {
+          const prevCmp = p.preview_compare_at_price
+            ? `<span class="price-strike">€${Number(p.preview_compare_at_price).toFixed(2)}</span>`
+            : "";
+          const floorBadge = p.floor_applied
+            ? `<span class="badge badge--floor" style="margin-left:6px;">Floor Guard €${Number(p.preview_price).toFixed(2)}</span>`
+            : `<span class="badge badge--preview" style="margin-left:6px;">-${p.preview_savings_pct}% (Save €${Number(p.preview_savings_amount).toFixed(2)})</span>`;
+          previewHtml = `<span class="price-current" style="color:#008060;">€${Number(p.preview_price).toFixed(2)}</span> ${prevCmp} ${floorBadge}`;
+        }
+
+        const tagsHtml = (p.tags || []).map(t => {
+          const cls = t === saleTag ? "tag-chip tag-chip--sale" : "tag-chip";
+          return `<span class="${cls}">${t}</span>`;
+        }).join("");
+
+        return `
+          <tr class="${p.on_sale ? 'row--sale' : ''}">
+            <td>
+              <input type="checkbox" ${isChecked ? "checked" : ""} onchange="toggleProduct('${p.id}', this.checked)" />
+            </td>
+            <td>
+              <div class="prod-cell">
+                <div class="prod-avatar" style="background:${p.color || '#008060'}">${p.badge || 'PG'}</div>
+                <div>
+                  <div class="prod-title">${p.title}</div>
+                  <div class="prod-meta">SKU: <strong>${p.sku}</strong> &bull; Stock: ${p.inventory} units</div>
+                </div>
+              </div>
+            </td>
+            <td>
+              <span class="price-current">€${Number(p.original_price).toFixed(2)}</span>
+              ${origCmp}
+            </td>
+            <td>
+              <span class="price-current">€${Number(p.price).toFixed(2)}</span>
+              ${liveCmp}
+              ${liveBadge}
+            </td>
+            <td>${previewHtml}</td>
+            <td>${tagsHtml}</td>
+          </tr>
+        `;
+      }).join("");
+    }
+
+    async function loadCollectionsList() {
+      const res = await authFetch(`/api/collections?shop=${encodeURIComponent(currentShop)}`);
+      const data = await res.json();
+      const sel = document.getElementById("collectionSelect");
+      sel.innerHTML = data.collections.map(c =>
+        `<option value="${c.id}" ${c.id === currentCollectionId ? "selected" : ""}>
+          ${c.title} (${c.product_count} products${c.is_active ? " • SALE ACTIVE" : ""})
+        </option>`
+      ).join("");
+    }
+
+    async function loadCollection(collectionId, resetSelection = true) {
+      currentCollectionId = collectionId;
+      const res = await authFetch(`/api/collections/${encodeURIComponent(collectionId)}?shop=${encodeURIComponent(currentShop)}`);
+      const data = await res.json();
+      if (resetSelection) {
+        selectedProductIds = new Set(data.collection.products.map(p => p.id));
+        document.getElementById("masterCheck").checked = true;
+      }
+      populateRulesForm(data.rules);
+      renderProducts(data.collection.products);
+      renderAuditLogs(data.logs);
+    }
+
+    async function onCollectionChange() {
+      const cid = document.getElementById("collectionSelect").value;
+      document.getElementById("statusBanner").style.display = "none";
+      await loadCollection(cid, true);
+    }
+
+    function setPreset(type, val) {
+      document.getElementById("discountType").value = type;
+      document.getElementById("discountValue").value = val;
+      triggerPreview();
+    }
+
+    function toggleProduct(id, checked) {
+      if (checked) selectedProductIds.add(id);
+      else selectedProductIds.delete(id);
+      triggerPreview();
+    }
+
+    function selectAll(checked) {
+      document.getElementById("masterCheck").checked = checked;
+      if (checked) {
+        currentProducts.forEach(p => selectedProductIds.add(p.id));
+      } else {
+        selectedProductIds.clear();
+      }
+      triggerPreview();
+    }
+
+    async function triggerPreview() {
+      const payload = readRulesFromForm();
+      const res = await authFetch(
+        `/api/collections/${encodeURIComponent(currentCollectionId)}/preview?shop=${encodeURIComponent(currentShop)}`,
+        { method: "POST", body: JSON.stringify(payload) }
+      );
+      const data = await res.json();
+      renderProducts(data.products);
+    }
+
+    async function applySale() {
+      const btn = document.getElementById("applyBtn");
+      btn.disabled = true;
+      try {
+        const payload = readRulesFromForm();
+        const res = await authFetch(
+          `/api/collections/${encodeURIComponent(currentCollectionId)}/apply?shop=${encodeURIComponent(currentShop)}`,
+          { method: "POST", body: JSON.stringify(payload) }
+        );
+        const data = await res.json();
+        populateRulesForm(data.rules);
+        renderProducts(data.products);
+        renderAuditLogs(data.logs);
+        showBanner("✓ " + data.message);
+        await loadCollectionsList();
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function rollbackSale() {
+      const btn = document.getElementById("rollbackBtn");
+      btn.disabled = true;
+      try {
+        const res = await authFetch(
+          `/api/collections/${encodeURIComponent(currentCollectionId)}/rollback?shop=${encodeURIComponent(currentShop)}`,
+          { method: "POST" }
+        );
+        const data = await res.json();
+        populateRulesForm(data.rules);
+        renderProducts(data.products);
+        renderAuditLogs(data.logs);
+        showBanner("↺ " + data.message);
+        await loadCollectionsList();
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function exportCsv() {
+      window.open(`/api/collections/${encodeURIComponent(currentCollectionId)}/export-csv?shop=${encodeURIComponent(currentShop)}`, "_blank");
+    }
+
+    (async function init() {
+      await loadCollectionsList();
+      await loadCollection(currentCollectionId, true);
+    })();
+  </script>
+</body>
+</html>

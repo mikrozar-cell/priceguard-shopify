@@ -1,0 +1,26 @@
+name = "PriceGuard Flash Sale Manager"
+client_id = "REPLACE_WITH_CLIENT_ID"
+application_url = "https://priceguard-app.onrender.com"
+embedded = true
+
+[access_scopes]
+scopes = "read_products,write_products"
+
+[auth]
+redirect_urls = [
+  "https://priceguard-app.onrender.com/auth/callback"
+]
+
+[webhooks]
+api_version = "2025-01"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/uninstalled" ]
+  uri = "/webhooks/app/uninstalled"
+
+  [[webhooks.subscriptions]]
+  compliance_topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
+  uri = "/webhooks/gdpr"
+
+[pos]
+embedded = false
