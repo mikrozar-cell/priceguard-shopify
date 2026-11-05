@@ -30,6 +30,14 @@ client = TestClient(app)
 
 
 def test_embedded_app_bridge_head():
+    # Unauthenticated real store redirects to OAuth
+    res_unauth = client.get("/?shop=unauthenticated-real.myshopify.com")
+    assert res_unauth.status_code == 200
+    assert "/auth?shop=unauthenticated-real.myshopify.com" in res_unauth.text
+
+    res_api_unauth = client.get("/api/collections?shop=unauthenticated-real.myshopify.com")
+    assert res_api_unauth.status_code == 401
+
     from app.database import upsert_shop
     upsert_shop("sortflow-dev-store.myshopify.com", "fake_access_token")
     res = client.get("/?shop=sortflow-dev-store.myshopify.com")
@@ -37,6 +45,12 @@ def test_embedded_app_bridge_head():
     html = res.text
     assert '<meta name="shopify-api-key"' in html
     assert 'src="https://cdn.shopify.com/shopifycloud/app-bridge.js"' in html
+    assert 'Pro Unlimited ($9.99/mo)' in html
+
+    # Billing subscribe endpoint
+    res_bill = client.post("/api/billing/subscribe?shop=demo-store.myshopify.com")
+    assert res_bill.status_code == 200
+    assert res_bill.json()["status"] == "active_sandbox"
 
 
 def test_apply_sale_and_prevent_double_discounting():

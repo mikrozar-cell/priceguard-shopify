@@ -413,12 +413,78 @@ class SaleRulesPayload(BaseModel):
     selected_product_ids: Optional[List[str]] = None
 
 
+DEMO_SHOP = "demo-store.myshopify.com"
+
+
+def is_live_shopify_session(shop: str) -> Optional[Dict[str, Any]]:
+    clean_shop = (shop or DEMO_SHOP).strip().lower()
+    if clean_shop == DEMO_SHOP:
+        return None
+    shop_row = get_shop(clean_shop)
+    if not shop_row or not shop_row.get("access_token"):
+        return None
+    if str(shop_row["access_token"]).startswith("fake_"):
+        return None
+    return shop_row
+
+
+def merge_snapshot_baseline(
+    live_products: List[Dict[str, Any]],
+    snap: Optional[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    if not snap or not snap.get("products"):
+        return live_products
+    snap_by_id = {p["id"]: p for p in snap["products"]}
+    merged: List[Dict[str, Any]] = []
+    for p in live_products:
+        item = copy.deepcopy(p)
+        s = snap_by_id.get(item["id"])
+        if s:
+            item["original_price"] = float(s.get("original_price", s["price"]))
+            item["original_compare_at_price"] = (
+                float(s["original_compare_at_price"])
+                if s.get("original_compare_at_price") is not None
+                else None
+            )
+            item["original_tags"] = list(s.get("original_tags", s.get("tags", [])))
+        merged.append(item)
+    return merged
+
+
 @app.get("/api/collections")
 async def api_list_collections(
-    shop: str = Query(default="sortflow-dev-store.myshopify.com"),
+    shop: str = Query(default=DEMO_SHOP),
     x_demo_session: Optional[str] = Header(default=None),
 ) -> Dict[str, Any]:
-    session_key = get_session_key(shop, x_demo_session)
+    clean_shop = (shop or DEMO_SHOP).strip().lower()
+    shop_row = get_shop(clean_shop)
+    if clean_shop != DEMO_SHOP and (not shop_row or not shop_row.get("access_token")):
+        raise HTTPException(
+            status_code=401,
+            detail={"error": "unauthorized", "auth_url": f"/auth?shop={urllib.parse.quote(clean_shop)}"},
+        )
+
+    live_session = is_live_shopify_session(clean_shop)
+    if live_session:
+        client = ShopifyGraphQLClient(clean_shop, live_session["access_token"])
+        live_cols = await client.list_collections(limit=50)
+        out = []
+        for c in live_cols:
+            cid = c["id"]
+            rules = get_sale_rules(clean_shop, cid)
+            out.append(
+                {
+                    "id": cid,
+                    "title": c["title"],
+                    "handle": c["handle"],
+                    "product_count": c["product_count"],
+                    "on_sale_count": 0,
+                    "is_active": rules["is_active"],
+                }
+            )
+        return {"shop": clean_shop, "mode": "live_shopify", "collections": out}
+
+    session_key = get_session_key(clean_shop, x_demo_session)
     cols = get_sandbox_collections(session_key)
     out = []
     for cid, col in cols.items():
@@ -434,16 +500,47 @@ async def api_list_collections(
                 "is_active": rules["is_active"],
             }
         )
-    return {"shop": shop, "collections": out}
+    return {"shop": clean_shop, "mode": "demo_sandbox", "collections": out}
 
 
 @app.get("/api/collections/{collection_id}")
 async def api_get_collection(
     collection_id: str,
-    shop: str = Query(default="sortflow-dev-store.myshopify.com"),
+    shop: str = Query(default=DEMO_SHOP),
     x_demo_session: Optional[str] = Header(default=None),
 ) -> Dict[str, Any]:
-    session_key = get_session_key(shop, x_demo_session)
+    clean_shop = (shop or DEMO_SHOP).strip().lower()
+    shop_row = get_shop(clean_shop)
+    if clean_shop != DEMO_SHOP and (not shop_row or not shop_row.get("access_token")):
+        raise HTTPException(
+            status_code=401,
+            detail={"error": "unauthorized", "auth_url": f"/auth?shop={urllib.parse.quote(clean_shop)}"},
+        )
+
+    live_session = is_live_shopify_session(clean_shop)
+    if live_session:
+        client = ShopifyGraphQLClient(clean_shop, live_session["access_token"])
+        col = await client.fetch_collection_products(collection_id)
+        rules = get_sale_rules(clean_shop, collection_id)
+        snap = get_price_snapshot(clean_shop, collection_id)
+        products = merge_snapshot_baseline(col["products"], snap)
+        logs = get_audit_logs(clean_shop, collection_id, limit=6)
+        previews = [compute_product_sale_preview(p, rules) for p in products]
+        return {
+            "shop": clean_shop,
+            "mode": "live_shopify",
+            "collection": {
+                "id": col["id"],
+                "title": col["title"],
+                "handle": col["handle"],
+                "products": previews,
+            },
+            "rules": rules,
+            "has_snapshot": snap is not None,
+            "logs": logs,
+        }
+
+    session_key = get_session_key(clean_shop, x_demo_session)
     cols = get_sandbox_collections(session_key)
     if collection_id not in cols:
         raise HTTPException(status_code=404, detail="Collection not found")
@@ -454,7 +551,8 @@ async def api_get_collection(
 
     previews = [compute_product_sale_preview(p, rules) for p in col["products"]]
     return {
-        "shop": shop,
+        "shop": clean_shop,
+        "mode": "demo_sandbox",
         "collection": {
             "id": col["id"],
             "title": col["title"],
@@ -471,10 +569,24 @@ async def api_get_collection(
 async def api_preview_sale(
     collection_id: str,
     payload: SaleRulesPayload,
-    shop: str = Query(default="sortflow-dev-store.myshopify.com"),
+    shop: str = Query(default=DEMO_SHOP),
     x_demo_session: Optional[str] = Header(default=None),
 ) -> Dict[str, Any]:
-    session_key = get_session_key(shop, x_demo_session)
+    clean_shop = (shop or DEMO_SHOP).strip().lower()
+    live_session = is_live_shopify_session(clean_shop)
+    if live_session:
+        client = ShopifyGraphQLClient(clean_shop, live_session["access_token"])
+        col = await client.fetch_collection_products(collection_id)
+        snap = get_price_snapshot(clean_shop, collection_id)
+        products = merge_snapshot_baseline(col["products"], snap)
+        saved_rules = save_sale_rules(clean_shop, collection_id, payload.dict())
+        previews = [
+            compute_product_sale_preview(p, saved_rules, selected_ids=payload.selected_product_ids)
+            for p in products
+        ]
+        return {"status": "ok", "rules": saved_rules, "products": previews}
+
+    session_key = get_session_key(clean_shop, x_demo_session)
     cols = get_sandbox_collections(session_key)
     if collection_id not in cols:
         raise HTTPException(status_code=404, detail="Collection not found")
@@ -497,10 +609,60 @@ async def api_preview_sale(
 async def api_apply_sale(
     collection_id: str,
     payload: SaleRulesPayload,
-    shop: str = Query(default="sortflow-dev-store.myshopify.com"),
+    shop: str = Query(default=DEMO_SHOP),
     x_demo_session: Optional[str] = Header(default=None),
 ) -> Dict[str, Any]:
-    session_key = get_session_key(shop, x_demo_session)
+    clean_shop = (shop or DEMO_SHOP).strip().lower()
+    live_session = is_live_shopify_session(clean_shop)
+    if live_session:
+        client = ShopifyGraphQLClient(clean_shop, live_session["access_token"])
+        col = await client.fetch_collection_products(collection_id)
+        existing_rules = get_sale_rules(clean_shop, collection_id)
+        existing_snap = get_price_snapshot(clean_shop, collection_id)
+        if not existing_snap or not existing_rules.get("is_active"):
+            save_price_snapshot(clean_shop, collection_id, col["products"], existing_rules)
+            existing_snap = get_price_snapshot(clean_shop, collection_id)
+
+        base_products = merge_snapshot_baseline(col["products"], existing_snap)
+        rules_dict = payload.dict()
+        rules_dict["is_active"] = True
+        saved_rules = save_sale_rules(clean_shop, collection_id, rules_dict)
+
+        updated_products = apply_flash_sale_to_products(
+            base_products,
+            saved_rules,
+            selected_ids=payload.selected_product_ids,
+        )
+        await client.sync_products_to_shopify(
+            updated_products,
+            sale_tag=saved_rules["sale_tag"],
+            auto_tag=saved_rules["auto_tag_sale"],
+            is_rollback=False,
+        )
+        discounted_cnt = sum(1 for p in updated_products if p.get("on_sale"))
+        label = (
+            f"-{int(saved_rules['discount_value'])}%"
+            if saved_rules["discount_type"] == "percentage"
+            else f"-€{saved_rules['discount_value']:.2f}"
+        )
+        msg = (
+            f"Flash Sale ({label}, .{saved_rules['rounding_mode']} rounding) synced to Shopify via GraphQL! "
+            f"{discounted_cnt}/{len(updated_products)} products on sale with immutable rollback snapshot."
+        )
+        add_audit_log(clean_shop, collection_id, "APPLY_SALE", msg)
+        previews = [
+            compute_product_sale_preview(p, saved_rules, selected_ids=payload.selected_product_ids)
+            for p in updated_products
+        ]
+        return {
+            "status": "ok",
+            "message": msg,
+            "rules": saved_rules,
+            "products": previews,
+            "logs": get_audit_logs(clean_shop, collection_id, limit=6),
+        }
+
+    session_key = get_session_key(clean_shop, x_demo_session)
     cols = get_sandbox_collections(session_key)
     if collection_id not in cols:
         raise HTTPException(status_code=404, detail="Collection not found")
@@ -551,10 +713,41 @@ async def api_apply_sale(
 @app.post("/api/collections/{collection_id}/rollback")
 async def api_rollback_sale(
     collection_id: str,
-    shop: str = Query(default="sortflow-dev-store.myshopify.com"),
+    shop: str = Query(default=DEMO_SHOP),
     x_demo_session: Optional[str] = Header(default=None),
 ) -> Dict[str, Any]:
-    session_key = get_session_key(shop, x_demo_session)
+    clean_shop = (shop or DEMO_SHOP).strip().lower()
+    live_session = is_live_shopify_session(clean_shop)
+    if live_session:
+        client = ShopifyGraphQLClient(clean_shop, live_session["access_token"])
+        col = await client.fetch_collection_products(collection_id)
+        snap = get_price_snapshot(clean_shop, collection_id)
+        cur_rules = get_sale_rules(clean_shop, collection_id)
+        if snap and snap.get("products"):
+            restored = restore_products_from_snapshot(col["products"], snap["products"])
+        else:
+            restored = col["products"]
+
+        await client.sync_products_to_shopify(
+            restored,
+            sale_tag=cur_rules.get("sale_tag", "on-sale"),
+            auto_tag=cur_rules.get("auto_tag_sale", True),
+            is_rollback=True,
+        )
+        cur_rules["is_active"] = False
+        saved_rules = save_sale_rules(clean_shop, collection_id, cur_rules)
+        msg = "1-Click Rollback complete: restored exact pre-sale prices, compare-at prices, and product tags on Shopify."
+        add_audit_log(clean_shop, collection_id, "ROLLBACK_SALE", msg)
+        previews = [compute_product_sale_preview(p, saved_rules) for p in restored]
+        return {
+            "status": "ok",
+            "message": msg,
+            "rules": saved_rules,
+            "products": previews,
+            "logs": get_audit_logs(clean_shop, collection_id, limit=6),
+        }
+
+    session_key = get_session_key(clean_shop, x_demo_session)
     cols = get_sandbox_collections(session_key)
     if collection_id not in cols:
         raise HTTPException(status_code=404, detail="Collection not found")
@@ -591,29 +784,61 @@ async def api_rollback_sale(
     }
 
 
+@app.post("/api/billing/subscribe")
+async def api_billing_subscribe(
+    shop: str = Query(default=DEMO_SHOP),
+) -> Dict[str, Any]:
+    clean_shop = (shop or DEMO_SHOP).strip().lower()
+    live_session = is_live_shopify_session(clean_shop)
+    return_url = f"{APP_URL}/?shop={urllib.parse.quote(clean_shop)}&billing=confirmed"
+    if live_session:
+        client = ShopifyGraphQLClient(clean_shop, live_session["access_token"])
+        res = await client.create_subscription(
+            return_url=return_url,
+            plan_name="Pro Unlimited",
+            price_usd=9.99,
+            trial_days=7,
+            test_mode=True,
+        )
+        sub_data = res.get("appSubscriptionCreate") or {}
+        if sub_data.get("confirmationUrl"):
+            return {"status": "redirect", "confirmation_url": sub_data["confirmationUrl"]}
+    return {"status": "active_sandbox", "plan": "Pro Unlimited ($9.99/mo, 7-day free trial)"}
+
+
 @app.get("/api/collections/{collection_id}/export-csv")
 async def api_export_csv(
     collection_id: str,
-    shop: str = Query(default="sortflow-dev-store.myshopify.com"),
+    shop: str = Query(default=DEMO_SHOP),
     x_demo_session: Optional[str] = Header(default=None),
 ) -> PlainTextResponse:
-    session_key = get_session_key(shop, x_demo_session)
-    cols = get_sandbox_collections(session_key)
-    if collection_id not in cols:
-        raise HTTPException(status_code=404, detail="Collection not found")
-    col = cols[collection_id]
+    clean_shop = (shop or DEMO_SHOP).strip().lower()
+    live_session = is_live_shopify_session(clean_shop)
+    if live_session:
+        client = ShopifyGraphQLClient(clean_shop, live_session["access_token"])
+        col = await client.fetch_collection_products(collection_id)
+        snap = get_price_snapshot(clean_shop, collection_id)
+        products = merge_snapshot_baseline(col["products"], snap)
+    else:
+        session_key = get_session_key(clean_shop, x_demo_session)
+        cols = get_sandbox_collections(session_key)
+        if collection_id not in cols:
+            raise HTTPException(status_code=404, detail="Collection not found")
+        products = cols[collection_id]["products"]
+
     lines = ["SKU,Product Title,Original Price,Current Price,Compare At Price,On Sale,Tags"]
-    for p in col["products"]:
+    for p in products:
         cmp_val = f"{p['compare_at_price']:.2f}" if p.get("compare_at_price") is not None else ""
         tags_str = "|".join(p.get("tags", []))
         title_esc = p["title"].replace('"', '""')
         lines.append(
             f"{p['sku']},\"{title_esc}\",{p['original_price']:.2f},{p['price']:.2f},{cmp_val},{p['on_sale']},\"{tags_str}\""
         )
+    safe_cid = collection_id.split("/")[-1]
     return PlainTextResponse(
         content="\n".join(lines),
         media_type="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="priceguard-{collection_id}.csv"'},
+        headers={"Content-Disposition": f'attachment; filename="priceguard-{safe_cid}.csv"'},
     )
 
 

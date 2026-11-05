@@ -173,3 +173,4 @@ def restore_products_from_snapshot(
         item["floor_applied"] = False
         restored.append(item)
     return restored
+

@@ -60,3 +60,4 @@ PriceGuard Flash Sale Manager is an embedded Shopify Admin app that requires zer
 4. Click "Apply Flash Sale & Sync to Shopify" to apply the sale prices, compare-at prices, and automatic "on-sale" product tags.
 5. Click "1-Click Revert to Original Prices" at any time to restore the exact pre-sale prices, compare-at prices, and tags from the immutable snapshot.
 ```
+

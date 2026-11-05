@@ -250,3 +250,4 @@ def get_audit_logs(shop_domain: str, collection_id: str, limit: int = 10) -> Lis
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+

@@ -96,6 +96,28 @@
       color: #202223;
     }
 
+    .pill--upgrade {
+      background: linear-gradient(135deg, #008060, #00a47c);
+      color: #fff;
+      border: 1px solid #00c896;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      font-family: inherit;
+    }
+
+    .pill--upgrade:hover {
+      background: #006e52;
+      transform: translateY(-1px);
+    }
+
+    .price-cell {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      flex-wrap: nowrap;
+      white-space: nowrap;
+    }
+
     .container {
       max-width: 1220px;
       margin: 20px auto;
@@ -390,13 +412,14 @@
     .price-current {
       font-weight: 700;
       font-size: 14px;
+      white-space: nowrap;
     }
 
     .price-strike {
       text-decoration: line-through;
       color: #8c9196;
       font-size: 12.5px;
-      margin-left: 6px;
+      white-space: nowrap;
     }
 
     .badge {
@@ -483,9 +506,10 @@
       <span>PriceGuard — Flash Sale &amp; Compare-At-Price Manager</span>
     </div>
     <div class="topbar-pills">
-      <span class="pill" id="shopPill">Shop: sortflow-dev-store.myshopify.com</span>
+      <span class="pill" id="shopPill">Shop: demo-store.myshopify.com</span>
       <span class="pill" id="campaignStatusPill">Status: Original Prices Active</span>
       <span class="pill pill--pro">Snapshot Rollback Shield Active</span>
+      <button type="button" class="pill pill--upgrade" id="proPlanBtn" onclick="subscribeProPlan()">&#9889; Pro Unlimited ($9.99/mo)</button>
     </div>
   </div>
 
@@ -617,8 +641,14 @@
 
   <script>
     const urlParams = new URLSearchParams(window.location.search);
-    const currentShop = urlParams.get("shop") || "sortflow-dev-store.myshopify.com";
+    const currentShop = urlParams.get("shop") || "demo-store.myshopify.com";
     document.getElementById("shopPill").textContent = "Shop: " + currentShop;
+
+    if (urlParams.get("billing") === "confirmed") {
+      setTimeout(() => {
+        showBanner("✓ Pro Unlimited Plan ($9.99/mo, 7-day free trial) activated via Shopify Billing!");
+      }, 200);
+    }
 
     let demoSessionId = sessionStorage.getItem("pg_demo_session");
     if (!demoSessionId) {
@@ -717,20 +747,20 @@
           ? `<span class="price-strike">€${Number(p.compare_at_price).toFixed(2)}</span>`
           : "";
         const liveBadge = p.on_sale
-          ? `<span class="badge badge--sale" style="margin-left:6px;">Live Sale</span>`
+          ? `<span class="badge badge--sale">Live Sale</span>`
           : "";
 
         let previewHtml = "";
         if (p.preview_skipped) {
-          previewHtml = `<span class="badge badge--skip">${p.skip_reason || "Skipped"}</span>`;
+          previewHtml = `<div class="price-cell"><span class="badge badge--skip">${p.skip_reason || "Skipped"}</span></div>`;
         } else {
           const prevCmp = p.preview_compare_at_price
             ? `<span class="price-strike">€${Number(p.preview_compare_at_price).toFixed(2)}</span>`
             : "";
           const floorBadge = p.floor_applied
-            ? `<span class="badge badge--floor" style="margin-left:6px;">Floor Guard €${Number(p.preview_price).toFixed(2)}</span>`
-            : `<span class="badge badge--preview" style="margin-left:6px;">-${p.preview_savings_pct}% (Save €${Number(p.preview_savings_amount).toFixed(2)})</span>`;
-          previewHtml = `<span class="price-current" style="color:#008060;">€${Number(p.preview_price).toFixed(2)}</span> ${prevCmp} ${floorBadge}`;
+            ? `<span class="badge badge--floor">Floor Guard €${Number(p.preview_price).toFixed(2)}</span>`
+            : `<span class="badge badge--preview">-${p.preview_savings_pct}% (Save €${Number(p.preview_savings_amount).toFixed(2)})</span>`;
+          previewHtml = `<div class="price-cell"><span class="price-current" style="color:#008060;">€${Number(p.preview_price).toFixed(2)}</span>${prevCmp}${floorBadge}</div>`;
         }
 
         const tagsHtml = (p.tags || []).map(t => {
@@ -753,13 +783,17 @@
               </div>
             </td>
             <td>
-              <span class="price-current">€${Number(p.original_price).toFixed(2)}</span>
-              ${origCmp}
+              <div class="price-cell">
+                <span class="price-current">€${Number(p.original_price).toFixed(2)}</span>
+                ${origCmp}
+              </div>
             </td>
             <td>
-              <span class="price-current">€${Number(p.price).toFixed(2)}</span>
-              ${liveCmp}
-              ${liveBadge}
+              <div class="price-cell">
+                <span class="price-current">€${Number(p.price).toFixed(2)}</span>
+                ${liveCmp}
+                ${liveBadge}
+              </div>
             </td>
             <td>${previewHtml}</td>
             <td>${tagsHtml}</td>
@@ -768,20 +802,82 @@
       }).join("");
     }
 
+    async function subscribeProPlan() {
+      const btn = document.getElementById("proPlanBtn");
+      btn.disabled = true;
+      try {
+        const res = await authFetch(`/api/billing/subscribe?shop=${encodeURIComponent(currentShop)}`, {
+          method: "POST",
+        });
+        const data = await res.json();
+        if (data.status === "redirect" && data.confirmation_url) {
+          if (window.top !== window.self) {
+            window.top.location.href = data.confirmation_url;
+          } else {
+            window.location.href = data.confirmation_url;
+          }
+          return;
+        }
+        showBanner("⚡ Active Plan: " + (data.plan || "Pro Unlimited ($9.99/mo, 7-day free trial)"));
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
     async function loadCollectionsList() {
       const res = await authFetch(`/api/collections?shop=${encodeURIComponent(currentShop)}`);
+      if (res.status === 401) {
+        const target = `/auth?shop=${encodeURIComponent(currentShop)}`;
+        if (window.top !== window.self) {
+          window.top.location.href = target;
+        } else {
+          window.location.href = target;
+        }
+        return false;
+      }
       const data = await res.json();
       const sel = document.getElementById("collectionSelect");
-      sel.innerHTML = data.collections.map(c =>
+      const cols = data.collections || [];
+      if (cols.length === 0) {
+        sel.innerHTML = `<option value="">No collections found in ${currentShop}</option>`;
+        document.getElementById("productTableBody").innerHTML = `
+          <tr>
+            <td colspan="6" style="text-align:center;padding:36px 20px;color:#4a4f55;">
+              <div style="font-weight:700;font-size:15px;margin-bottom:6px;">No Shopify Collections Found</div>
+              <div style="font-size:13px;color:#6d7175;margin-bottom:14px;">
+                Create at least one product collection in your Shopify Admin to launch Flash Sales and manage Compare-at-Prices.
+              </div>
+              <a class="btn btn--primary" href="https://${currentShop}/admin/collections" target="_top" style="text-decoration:none;">
+                + Create Collection in Shopify Admin
+              </a>
+            </td>
+          </tr>`;
+        return false;
+      }
+      if (!cols.some(c => c.id === currentCollectionId)) {
+        currentCollectionId = cols[0].id;
+      }
+      sel.innerHTML = cols.map(c =>
         `<option value="${c.id}" ${c.id === currentCollectionId ? "selected" : ""}>
           ${c.title} (${c.product_count} products${c.is_active ? " • SALE ACTIVE" : ""})
         </option>`
       ).join("");
+      return true;
     }
 
     async function loadCollection(collectionId, resetSelection = true) {
+      if (!collectionId) return;
       currentCollectionId = collectionId;
       const res = await authFetch(`/api/collections/${encodeURIComponent(collectionId)}?shop=${encodeURIComponent(currentShop)}`);
+      if (res.status === 401) {
+        const target = `/auth?shop=${encodeURIComponent(currentShop)}`;
+        if (window.top !== window.self) {
+          window.top.location.href = target;
+        } else {
+          window.location.href = target;
+        }
+        return;
+      }
       const data = await res.json();
       if (resetSelection) {
         selectedProductIds = new Set(data.collection.products.map(p => p.id));
@@ -874,8 +970,10 @@
     }
 
     (async function init() {
-      await loadCollectionsList();
-      await loadCollection(currentCollectionId, true);
+      const ok = await loadCollectionsList();
+      if (ok && currentCollectionId) {
+        await loadCollection(currentCollectionId, true);
+      }
     })();
   </script>
 </body>
