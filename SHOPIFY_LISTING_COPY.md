@@ -14,14 +14,14 @@
 
 ## 2. App Details / Introduction (До 100 символов)
 ```text
-Launch collection flash sales with strikethrough compare-at prices and 1-click original price rollback.
+Launch collection flash sales with compare-at values and 1-click original catalog rollback.
 ```
 
 ---
 
 ## 3. App Details / Detailed Description (До 500 символов)
 ```text
-PriceGuard simplifies running storewide or collection flash sales using native Shopify prices and compare-at prices. Before applying any discount, PriceGuard captures an immutable snapshot of your original variant prices, compare-at prices, and product tags. Apply percentage or fixed-amount markdowns, round cents to .99 or .95, set a minimum price floor to protect unit margins, skip clearance items, and restore your exact pre-sale catalog prices with a single click when the sale ends.
+PriceGuard simplifies running storewide or collection flash sales using native Shopify markdowns. Before applying any discount, an immutable snapshot captures your original variant values, compare-at amounts, and product tags. Apply percentage or fixed markdowns, round cents to .99 or .95, set a minimum margin floor to protect unit profits, skip clearance items, and restore your exact pre-sale catalog values with a single click when the sale ends.
 ```
 
 ---
