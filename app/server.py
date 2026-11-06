@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 from fastapi import FastAPI, Header, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from pydantic import BaseModel
 
 from app.database import (
@@ -877,6 +877,16 @@ async def handle_shopify_webhooks(
 
 # ---------------------------------------------------------------------------
 # Public Privacy Policy, Support & Health Endpoints
+@app.get("/screencast")
+@app.get("/screencast.webm")
+@app.get("/demo.webm")
+async def screencast_video():
+    path = os.path.join(os.path.dirname(__file__), "static", "demo.webm")
+    if os.path.exists(path):
+        return FileResponse(path, media_type="video/webm")
+    raise HTTPException(status_code=404, detail="Screencast video not found")
+
+
 # ---------------------------------------------------------------------------
 @app.get("/health")
 async def health_check() -> Dict[str, str]:
