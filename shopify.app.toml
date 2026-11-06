@@ -1,6 +1,6 @@
 name = "PriceGuard Flash Sale Manager"
 client_id = "29501bda2d166fbcb917e600b79e168c"
-application_url = "https://priceguard-shopify.onrender.com"
+application_url = "https://priceguard-app.onrender.com"
 embedded = true
 
 [access_scopes]
@@ -8,7 +8,7 @@ scopes = "read_products,write_products"
 
 [auth]
 redirect_urls = [
-  "https://priceguard-shopify.onrender.com/auth/callback"
+  "https://priceguard-app.onrender.com/auth/callback"
 ]
 
 [webhooks]
