@@ -70,13 +70,24 @@ def compute_product_sale_preview(
     rounding_mode = str(rules.get("rounding_mode", "99"))
     min_floor = float(rules.get("min_price_floor", 0.0))
 
+    # If discount is 0 or negative, keep exact original pricing without markdowns
+    if discount_val <= 0:
+        p["preview_price"] = round(orig_price, 2)
+        p["preview_compare_at_price"] = orig_Compare_val
+        p["preview_savings_amount"] = 0.0
+        p["preview_savings_pct"] = 0.0
+        p["floor_applied"] = False
+        p["preview_skipped"] = False
+        p["skip_reason"] = None
+        return p
+
     # Always calculate from the immutable original base price (or original compare_at_price if higher)
     anchor_price = orig_Compare_val if (orig_Compare_val and orig_Compare_val > orig_price) else orig_price
 
     if discount_type == "fixed":
-        raw_new = anchor_price - discount_val
+        raw_new = max(0.01, anchor_price - discount_val)
     else:
-        pct = max(1.0, min(95.0, discount_val))
+        pct = max(0.0, min(95.0, discount_val))
         raw_new = anchor_price * (1.0 - pct / 100.0)
 
     rounded_new = apply_rounding(raw_new, anchor_price, rounding_mode)

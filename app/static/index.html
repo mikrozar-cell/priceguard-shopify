@@ -765,10 +765,16 @@
           const prevCmp = p.preview_compare_at_price
             ? `<span class="price-strike">€${Number(p.preview_compare_at_price).toFixed(2)}</span>`
             : "";
-          const floorBadge = p.floor_applied
-            ? `<span class="badge badge--floor">Floor Guard €${Number(p.preview_price).toFixed(2)}</span>`
-            : `<span class="badge badge--preview">-${p.preview_savings_pct}% (Save €${Number(p.preview_savings_amount).toFixed(2)})</span>`;
-          previewHtml = `<div class="price-cell"><span class="price-current" style="color:#008060;">€${Number(p.preview_price).toFixed(2)}</span>${prevCmp}${floorBadge}</div>`;
+          let savingsBadge = "";
+          if (p.floor_applied) {
+            savingsBadge = `<span class="badge badge--floor">Floor Guard €${Number(p.preview_price).toFixed(2)}</span>`;
+          } else if (p.preview_savings_amount > 0) {
+            savingsBadge = `<span class="badge badge--preview">-${p.preview_savings_pct}% (Save €${Number(p.preview_savings_amount).toFixed(2)})</span>`;
+          } else {
+            savingsBadge = `<span class="badge badge--skip">No Discount</span>`;
+          }
+          const priceColor = p.preview_savings_amount > 0 ? "color:#008060;" : "";
+          previewHtml = `<div class="price-cell"><span class="price-current" style="${priceColor}">€${Number(p.preview_price).toFixed(2)}</span>${prevCmp}${savingsBadge}</div>`;
         }
 
         const tagsHtml = (p.tags || []).map(t => {
