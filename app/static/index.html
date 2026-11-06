@@ -271,19 +271,22 @@
 
     .preset-row {
       display: flex;
-      gap: 6px;
-      margin-top: 8px;
-      flex-wrap: wrap;
+      gap: 5px;
+      margin-top: 6px;
     }
 
     .preset-btn {
-      padding: 3px 8px;
+      flex: 1;
+      padding: 4px 0;
+      text-align: center;
       font-size: 11.5px;
       font-weight: 600;
       border-radius: 5px;
       border: 1px solid #d2d5d8;
       background: #fff;
       cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.15s ease;
     }
 
     .preset-btn:hover {
@@ -550,19 +553,24 @@
       <div class="field-box">
         <label class="field-label">2. Discount Rule &amp; Value</label>
         <div class="inline-inputs">
-          <select id="discountType" onchange="triggerPreview()" style="width: 56%;">
+          <select id="discountType" onchange="triggerPreview()" style="flex: 1; min-width: 0;">
             <option value="percentage">Percentage (% Off)</option>
             <option value="fixed">Fixed Amount (€ Off)</option>
           </select>
-          <input type="number" id="discountValue" value="20" min="1" max="95" step="1" oninput="triggerPreview()"
-            style="width: 44%;" />
+          <input type="number" id="discountValue" value="20" min="1" max="999" step="1" oninput="triggerPreview()"
+            style="width: 68px; flex-shrink: 0;" />
         </div>
-        <div class="preset-row">
+        <div class="preset-row" style="margin-top: 8px;">
           <button type="button" class="preset-btn" onclick="setPreset('percentage', 15)">-15%</button>
           <button type="button" class="preset-btn" onclick="setPreset('percentage', 20)">-20%</button>
           <button type="button" class="preset-btn" onclick="setPreset('percentage', 30)">-30%</button>
           <button type="button" class="preset-btn" onclick="setPreset('percentage', 50)">-50%</button>
+        </div>
+        <div class="preset-row">
+          <button type="button" class="preset-btn" onclick="setPreset('fixed', 5)">-€5</button>
           <button type="button" class="preset-btn" onclick="setPreset('fixed', 10)">-€10</button>
+          <button type="button" class="preset-btn" onclick="setPreset('fixed', 15)">-€15</button>
+          <button type="button" class="preset-btn" onclick="setPreset('fixed', 20)">-€20</button>
         </div>
       </div>
 
