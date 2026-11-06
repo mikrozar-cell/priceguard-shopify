@@ -840,14 +840,20 @@
 
     async function loadCollectionsList() {
       const res = await authFetch(`/api/collections?shop=${encodeURIComponent(currentShop)}`);
-      if (res.status === 401) {
-        const target = `/auth?shop=${encodeURIComponent(currentShop)}`;
-        if (window.top !== window.self) {
-          window.top.location.href = target;
-        } else {
-          window.location.href = target;
+      if (res.status === 401 || !res.ok) {
+        if (currentShop !== "demo-store.myshopify.com") {
+          let target = `/auth?shop=${encodeURIComponent(currentShop)}`;
+          try {
+            const err = await res.json();
+            if (err && err.detail && err.detail.auth_url) target = err.detail.auth_url;
+          } catch (_) {}
+          if (window.top !== window.self) {
+            window.top.location.href = target;
+          } else {
+            window.location.href = target;
+          }
+          return false;
         }
-        return false;
       }
       const data = await res.json();
       const sel = document.getElementById("collectionSelect");

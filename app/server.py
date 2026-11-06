@@ -464,25 +464,31 @@ async def api_list_collections(
             detail={"error": "unauthorized", "auth_url": f"/auth?shop={urllib.parse.quote(clean_shop)}"},
         )
 
-    live_session = is_live_shopify_session(clean_shop)
-    if live_session:
-        client = ShopifyGraphQLClient(clean_shop, live_session["access_token"])
-        live_cols = await client.list_collections(limit=50)
-        out = []
-        for c in live_cols:
-            cid = c["id"]
-            rules = get_sale_rules(clean_shop, cid)
-            out.append(
-                {
-                    "id": cid,
-                    "title": c["title"],
-                    "handle": c["handle"],
-                    "product_count": c["product_count"],
-                    "on_sale_count": 0,
-                    "is_active": rules["is_active"],
-                }
-            )
-        return {"shop": clean_shop, "mode": "live_shopify", "collections": out}
+    try:
+        live_session = is_live_shopify_session(clean_shop)
+        if live_session:
+            client = ShopifyGraphQLClient(clean_shop, live_session["access_token"])
+            live_cols = await client.list_collections(limit=50)
+            out = []
+            for c in live_cols:
+                cid = c["id"]
+                rules = get_sale_rules(clean_shop, cid)
+                out.append(
+                    {
+                        "id": cid,
+                        "title": c["title"],
+                        "handle": c["handle"],
+                        "product_count": c["product_count"],
+                        "on_sale_count": 0,
+                        "is_active": rules["is_active"],
+                    }
+                )
+            return {"shop": clean_shop, "mode": "live_shopify", "collections": out}
+    except Exception:
+        raise HTTPException(
+            status_code=401,
+            detail={"error": "unauthorized", "auth_url": f"/auth?shop={urllib.parse.quote(clean_shop)}"},
+        )
 
     session_key = get_session_key(clean_shop, x_demo_session)
     cols = get_sandbox_collections(session_key)

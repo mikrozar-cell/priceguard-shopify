@@ -16,7 +16,8 @@ DB_PATH = os.environ.get(
 
 
 def get_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    conn = sqlite3.connect(DB_PATH, timeout=30.0, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -83,6 +84,12 @@ def init_db() -> None:
     conn.close()
 
 
+try:
+    init_db()
+except Exception:
+    pass
+
+
 def upsert_shop(shop_domain: str, access_token: str, scope: str = "read_products,write_products") -> None:
     now = time.time()
     conn = get_conn()
@@ -102,10 +109,13 @@ def upsert_shop(shop_domain: str, access_token: str, scope: str = "read_products
 
 
 def get_shop(shop_domain: str) -> Optional[Dict[str, Any]]:
-    conn = get_conn()
-    row = conn.execute("SELECT * FROM shops WHERE shop_domain = ?", (shop_domain,)).fetchone()
-    conn.close()
-    return dict(row) if row else None
+    try:
+        conn = get_conn()
+        row = conn.execute("SELECT * FROM shops WHERE shop_domain = ?", (shop_domain.strip().lower(),)).fetchone()
+        conn.close()
+        return dict(row) if row else None
+    except Exception:
+        return None
 
 
 def delete_shop_data(shop_domain: str) -> None:
