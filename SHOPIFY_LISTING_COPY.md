@@ -7,6 +7,8 @@
 ## 1. Basic App Information
 * **App Name (29 chars):** `PriceGuard Flash Sale Manager`
 * **Subtitle / Tagline:** `Bulk compare-at-price flash sales with 1-click price rollback`
+* **Feature Image (Главный баннер 1600x900 px):** `priceguard_feature_1600x900.png`
+  * **Alt text (54 chars):** `PriceGuard flash sale automation and margin protection`
 * **Primary Category:** `Marketing and conversion` -> `Promotions` -> `Discounts` (или `Promotions - Other`)
 * **Secondary Category:** `Store management` -> `Operations` -> `Bulk editor`
 
@@ -39,11 +41,11 @@ PriceGuard simplifies running storewide or collection flash sales using native S
 * **Plan Name:** `Pro Unlimited`
 * **Price:** `$9.99 / month`
 * **Free Trial:** `7 days`
-* **Plan Features (4 строки без спецсимволов):**
-  * `Unlimited collection flash sales and bulk compare-at-price updates`
-  * `1-click original price rollback from pre-sale snapshots`
-  * `Psychological price rounding (.99 / .95) and minimum price floor guard`
-  * `Automatic sale tag sync and CSV price snapshot export`
+* **Plan Features (4 строки до 40 символов):**
+  * `Unlimited collection flash sales`
+  * `Bulk compare-at price discounts`
+  * `1-click pre-sale price rollback`
+  * `Psychological price rounding .99`
 
 ---
 
