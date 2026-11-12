@@ -30,10 +30,11 @@ client = TestClient(app)
 
 
 def test_embedded_app_bridge_head():
-    # Unauthenticated real store redirects to OAuth
+    # Unauthenticated real store serves embedded App Bridge UI without blocked iframe top-redirect
     res_unauth = client.get("/?shop=unauthenticated-real.myshopify.com")
     assert res_unauth.status_code == 200
-    assert "/auth?shop=unauthenticated-real.myshopify.com" in res_unauth.text
+    assert 'src="https://cdn.shopify.com/shopifycloud/app-bridge.js"' in res_unauth.text
+    assert "resolveShopDomain" in res_unauth.text
 
     res_api_unauth = client.get("/api/collections?shop=unauthenticated-real.myshopify.com")
     assert res_api_unauth.status_code == 401
@@ -45,7 +46,7 @@ def test_embedded_app_bridge_head():
     html = res.text
     assert '<meta name="shopify-api-key"' in html
     assert 'src="https://cdn.shopify.com/shopifycloud/app-bridge.js"' in html
-    assert 'Pro Unlimited ($9.99/mo)' in html
+    assert 'subscribeProPlan()' in html
 
     # Billing subscribe endpoint
     res_bill = client.post("/api/billing/subscribe?shop=demo-store.myshopify.com")

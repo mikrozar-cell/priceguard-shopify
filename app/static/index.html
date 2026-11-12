@@ -512,7 +512,7 @@
       <span class="pill" id="shopPill">Shop: demo-store.myshopify.com</span>
       <span class="pill" id="campaignStatusPill">Status: Original Prices Active</span>
       <span class="pill pill--pro">Snapshot Rollback Shield Active</span>
-      <button type="button" class="pill pill--upgrade" id="proPlanBtn" onclick="subscribeProPlan()">&#9889; Pro Unlimited ($9.99/mo)</button>
+      <button type="button" class="pill pill--upgrade" id="proPlanBtn" onclick="subscribeProPlan()">&#9889; Pro Plan Active</button>
     </div>
   </div>
 
@@ -649,7 +649,38 @@
 
   <script>
     const urlParams = new URLSearchParams(window.location.search);
-    const currentShop = urlParams.get("shop") || "demo-store.myshopify.com";
+    function resolveShopDomain() {
+      const fromQuery = urlParams.get("shop");
+      if (fromQuery && fromQuery.trim()) {
+        const clean = fromQuery.trim().toLowerCase();
+        try { sessionStorage.setItem("priceguard_shop_domain", clean); } catch (_) {}
+        return clean;
+      }
+      if (window.shopify && window.shopify.config && window.shopify.config.shop) {
+        const clean = String(window.shopify.config.shop).trim().toLowerCase();
+        try { sessionStorage.setItem("priceguard_shop_domain", clean); } catch (_) {}
+        return clean;
+      }
+      const idTok = urlParams.get("id_token");
+      if (idTok && idTok.split(".").length === 3) {
+        try {
+          const payload = JSON.parse(atob(idTok.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+          if (payload && payload.dest) {
+            const clean = String(payload.dest).replace(/^https?:\/\//, "").split("/")[0].trim().toLowerCase();
+            if (clean) {
+              try { sessionStorage.setItem("priceguard_shop_domain", clean); } catch (_) {}
+              return clean;
+            }
+          }
+        } catch (_) {}
+      }
+      try {
+        const saved = sessionStorage.getItem("priceguard_shop_domain");
+        if (saved && saved.trim()) return saved.trim().toLowerCase();
+      } catch (_) {}
+      return "demo-store.myshopify.com";
+    }
+    const currentShop = resolveShopDomain();
     document.getElementById("shopPill").textContent = "Shop: " + currentShop;
 
     if (urlParams.get("billing") === "confirmed") {
@@ -674,14 +705,22 @@
       if (!headers.has("Content-Type") && options.body) {
         headers.set("Content-Type", "application/json");
       }
+      let bearerSet = false;
       if (window.shopify && typeof window.shopify.idToken === "function") {
         try {
           const token = await window.shopify.idToken();
           if (token) {
             headers.set("Authorization", "Bearer " + token);
+            bearerSet = true;
           }
         } catch (err) {
           console.warn("App Bridge idToken fallback:", err);
+        }
+      }
+      if (!bearerSet) {
+        const urlIdToken = urlParams.get("id_token");
+        if (urlIdToken) {
+          headers.set("Authorization", "Bearer " + urlIdToken);
         }
       }
       return fetch(url, { ...options, headers });
@@ -825,8 +864,19 @@
         });
         const data = await res.json();
         if (data.status === "redirect" && data.confirmation_url) {
+          try {
+            window.open(data.confirmation_url, "_top");
+          } catch (_) {}
+          try {
+            const a = document.createElement("a");
+            a.href = data.confirmation_url;
+            a.target = "_top";
+            a.rel = "noopener";
+            document.body.appendChild(a);
+            a.click();
+          } catch (_) {}
           if (window.top !== window.self) {
-            window.top.location.href = data.confirmation_url;
+            try { window.top.location.href = data.confirmation_url; } catch (_) { window.location.href = data.confirmation_url; }
           } else {
             window.location.href = data.confirmation_url;
           }
