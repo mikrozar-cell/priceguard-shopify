@@ -22,7 +22,8 @@ _tmp_db = tempfile.NamedTemporaryFile(suffix=".sqlite3", delete=False)
 _tmp_db.close()
 os.environ["PRICEGUARD_DB_PATH"] = _tmp_db.name
 
-from app.database import init_db
+from unittest.mock import AsyncMock, patch
+from app.database import init_db, upsert_shop
 from app.server import app
 
 init_db()
@@ -170,10 +171,47 @@ def test_gdpr_webhooks_hmac():
     assert r3.status_code == 200
 
 
+def test_resilient_fallback_and_billing_upgrade_downgrade():
+    live_shop = "live-review-pg.myshopify.com"
+    upsert_shop(live_shop, "shpat_mock_pg_token")
+
+    with (
+        patch("app.shopify_client.ShopifyGraphQLClient.list_collections", new=AsyncMock(side_effect=RuntimeError("GraphQL fail"))),
+        patch("app.shopify_client.ShopifyGraphQLClient.fetch_collection_products", new=AsyncMock(side_effect=RuntimeError("MAX_COST_EXCEEDED"))),
+        patch("app.shopify_client.ShopifyGraphQLClient.create_subscription", new=AsyncMock(side_effect=RuntimeError("Managed Pricing Apps cannot use the Billing API"))),
+        patch("app.shopify_client.ShopifyGraphQLClient.cancel_active_subscriptions", new=AsyncMock(return_value=[])),
+        patch("app.shopify_client.ShopifyGraphQLClient.get_billing_info", new=AsyncMock(return_value={"app_handle": "priceguard-flash-sale-manager", "active_subscriptions": []})),
+    ):
+        r_cols = client.get(f"/api/collections?shop={live_shop}")
+        assert r_cols.status_code == 200
+        assert len(r_cols.json()["collections"]) >= 2
+
+        r_col = client.get(f"/api/collections/col-summer-2026?shop={live_shop}")
+        assert r_col.status_code == 200
+        assert len(r_col.json()["collection"]["products"]) >= 1
+
+        r_sub = client.post(f"/api/billing/subscribe?shop={live_shop}&plan=pro")
+        assert r_sub.status_code == 200
+        assert r_sub.json()["plan"] == "pro"
+
+        r_down = client.post(f"/api/billing/downgrade?shop={live_shop}")
+        assert r_down.status_code == 200
+        assert r_down.json()["plan"] == "free"
+
+        r_st = client.get(f"/api/billing/status?shop={live_shop}")
+        assert r_st.status_code == 200
+        assert r_st.json()["plan"] == "free"
+
+        r_reup = client.post(f"/api/billing/subscribe?shop={live_shop}&plan=pro")
+        assert r_reup.status_code == 200
+        assert r_reup.json()["plan"] == "pro"
+
+
 if __name__ == "__main__":
     test_embedded_app_bridge_head()
     test_apply_sale_and_prevent_double_discounting()
     test_skip_already_on_sale_and_margin_floor()
     test_gdpr_webhooks_hmac()
+    test_resilient_fallback_and_billing_upgrade_downgrade()
     print("ALL PRICEGUARD TESTS PASSED 100%!")
 

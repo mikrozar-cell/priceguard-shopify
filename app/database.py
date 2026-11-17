@@ -118,6 +118,34 @@ def get_shop(shop_domain: str) -> Optional[Dict[str, Any]]:
         return None
 
 
+def set_shop_plan(shop_domain: str, plan_status: str) -> None:
+    now = time.time()
+    clean_shop = (shop_domain or "").strip().lower()
+    if not clean_shop:
+        return
+    conn = get_conn()
+    conn.execute(
+        """
+        INSERT INTO shops (shop_domain, access_token, scope, plan_status, installed_at, updated_at)
+        VALUES (?, '', 'read_products,write_products', ?, ?, ?)
+        ON CONFLICT(shop_domain) DO UPDATE SET
+            plan_status = excluded.plan_status,
+            updated_at = excluded.updated_at
+        """,
+        (clean_shop, plan_status, now, now),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_shop_plan(shop_domain: str) -> str:
+    row = get_shop(shop_domain)
+    if not row:
+        return "pro"
+    val = (row.get("plan_status") or "pro").strip().lower()
+    return "free" if val == "free" else "pro"
+
+
 def delete_shop_data(shop_domain: str) -> None:
     conn = get_conn()
     conn.execute("DELETE FROM shops WHERE shop_domain = ?", (shop_domain,))

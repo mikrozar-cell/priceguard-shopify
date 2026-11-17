@@ -23,6 +23,7 @@ class ShopifyGraphQLClient:
         self.shop_domain = shop_domain
         self.access_token = access_token
         self.endpoint = f"https://{shop_domain}/admin/api/{SHOPIFY_API_VERSION}/graphql.json"
+        self.rest_base = f"https://{shop_domain}/admin/api/{SHOPIFY_API_VERSION}"
 
     async def execute(self, query: str, variables: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         headers = {
@@ -41,6 +42,20 @@ class ShopifyGraphQLClient:
                 raise RuntimeError(f"Shopify GraphQL error: {payload['errors']}")
             return payload.get("data", {})
 
+    async def rest_get(self, path: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        headers = {
+            "X-Shopify-Access-Token": self.access_token,
+            "Accept": "application/json",
+        }
+        async with httpx.AsyncClient(timeout=25.0) as client:
+            resp = await client.get(
+                f"{self.rest_base}/{path.lstrip('/')}",
+                params=params or {},
+                headers=headers,
+            )
+            resp.raise_for_status()
+            return resp.json()
+
     async def list_collections(self, limit: int = 50) -> List[Dict[str, Any]]:
         query = """
         query ListCollections($first: Int!) {
@@ -56,20 +71,68 @@ class ShopifyGraphQLClient:
           }
         }
         """
-        data = await self.execute(query, {"first": limit})
-        nodes = (data.get("collections") or {}).get("nodes") or []
-        return [
-            {
-                "id": n["id"].split("/")[-1],
-                "gid": n["id"],
-                "title": n["title"],
-                "handle": n.get("handle", ""),
-                "product_count": (n.get("productsCount") or {}).get("count", 0),
-            }
-            for n in nodes
-        ]
+        try:
+            data = await self.execute(query, {"first": limit})
+            nodes = (data.get("collections") or {}).get("nodes") or []
+            return [
+                {
+                    "id": n["id"].split("/")[-1],
+                    "gid": n["id"],
+                    "title": n["title"],
+                    "handle": n.get("handle", ""),
+                    "product_count": (n.get("productsCount") or {}).get("count", 0),
+                }
+                for n in nodes
+            ]
+        except Exception:
+            pass
 
-    async def fetch_collection_products(self, collection_id: str, first: int = 100) -> Dict[str, Any]:
+        minimal_query = """
+        query ListCollectionsMinimal($first: Int!) {
+          collections(first: $first) {
+            nodes {
+              id
+              title
+              handle
+            }
+          }
+        }
+        """
+        try:
+            data = await self.execute(minimal_query, {"first": limit})
+            nodes = (data.get("collections") or {}).get("nodes") or []
+            return [
+                {
+                    "id": n["id"].split("/")[-1],
+                    "gid": n["id"],
+                    "title": n["title"],
+                    "handle": n.get("handle", ""),
+                    "product_count": 0,
+                }
+                for n in nodes
+            ]
+        except Exception:
+            pass
+
+        custom_res = await self.rest_get("custom_collections.json", {"limit": min(limit, 50)})
+        smart_res = await self.rest_get("smart_collections.json", {"limit": min(limit, 50)})
+        combined = (custom_res.get("custom_collections") or []) + (smart_res.get("smart_collections") or [])
+        out: List[Dict[str, Any]] = []
+        for c in combined[:limit]:
+            cid = str(c["id"])
+            out.append(
+                {
+                    "id": cid,
+                    "gid": f"gid://shopify/Collection/{cid}",
+                    "title": c.get("title") or f"Collection #{cid}",
+                    "handle": c.get("handle", ""),
+                    "product_count": int(c.get("products_count") or 0),
+                }
+            )
+        return out
+
+    async def fetch_collection_products(self, collection_id: str, first: int = 50) -> Dict[str, Any]:
+        safe_first = max(1, min(int(first), 50))
         gid = collection_id if collection_id.startswith("gid://") else f"gid://shopify/Collection/{collection_id}"
         query = """
         query GetCollectionProducts($id: ID!, $first: Int!) {
@@ -97,29 +160,78 @@ class ShopifyGraphQLClient:
           }
         }
         """
-        data = await self.execute(query, {"id": gid, "first": first})
-        col = data.get("collection") or {}
-        nodes = (col.get("products") or {}).get("nodes") or []
+        col: Dict[str, Any] = {}
         products: List[Dict[str, Any]] = []
+        try:
+            data = await self.execute(query, {"id": gid, "first": safe_first})
+            col = data.get("collection") or {}
+            nodes = (col.get("products") or {}).get("nodes") or []
+            for idx, n in enumerate(nodes):
+                var_nodes = (n.get("variants") or {}).get("nodes") or []
+                if not var_nodes:
+                    continue
+                v = var_nodes[0]
+                price_val = float(v.get("price") or 0.0)
+                cmp_raw = v.get("compareAtPrice")
+                cmp_val = float(cmp_raw) if cmp_raw not in (None, "") else None
+                sku = v.get("sku") or f"SKU-{n['id'].split('/')[-1]}"
+                words = [w for w in (n.get("title") or "PG").split() if w and w[0].isalnum()]
+                badge = (words[0][0] + (words[1][0] if len(words) > 1 else words[0][-1])).upper()
+                tags_list = list(n.get("tags") or [])
 
-        for idx, n in enumerate(nodes):
-            var_nodes = (n.get("variants") or {}).get("nodes") or []
-            if not var_nodes:
+                products.append(
+                    {
+                        "id": n["id"],
+                        "variant_id": v["id"],
+                        "title": n.get("title") or "Untitled Product",
+                        "sku": sku,
+                        "badge": badge,
+                        "color": AVATAR_COLORS[idx % len(AVATAR_COLORS)],
+                        "price": price_val,
+                        "compare_at_price": cmp_val,
+                        "original_price": price_val,
+                        "original_compare_at_price": cmp_val,
+                        "inventory": int(n.get("totalInventory") or 0),
+                        "tags": tags_list,
+                        "original_tags": list(tags_list),
+                        "on_sale": cmp_val is not None and cmp_val > price_val,
+                    }
+                )
+            return {
+                "id": collection_id.split("/")[-1],
+                "gid": col.get("id", gid),
+                "title": col.get("title") or f"Collection #{collection_id}",
+                "handle": col.get("handle") or "",
+                "products": products,
+            }
+        except Exception:
+            pass
+
+        # REST Admin API Fallback
+        numeric_id = collection_id.split("/")[-1]
+        col_json = await self.rest_get(f"collections/{numeric_id}.json")
+        col_obj = col_json.get("collection") or {}
+        prods_json = await self.rest_get(f"collections/{numeric_id}/products.json", {"limit": safe_first})
+        for idx, p in enumerate(prods_json.get("products") or []):
+            variants = p.get("variants") or []
+            if not variants:
                 continue
-            v = var_nodes[0]
+            v = variants[0]
+            pid = str(p["id"])
+            vid = str(v["id"])
             price_val = float(v.get("price") or 0.0)
-            cmp_raw = v.get("compareAtPrice")
+            cmp_raw = v.get("compare_at_price")
             cmp_val = float(cmp_raw) if cmp_raw not in (None, "") else None
-            sku = v.get("sku") or f"SKU-{n['id'].split('/')[-1]}"
-            words = [w for w in (n.get("title") or "PG").split() if w and w[0].isalnum()]
+            sku = v.get("sku") or f"SKU-{pid}"
+            words = [w for w in (p.get("title") or "PG").split() if w and w[0].isalnum()]
             badge = (words[0][0] + (words[1][0] if len(words) > 1 else words[0][-1])).upper()
-            tags_list = list(n.get("tags") or [])
-
+            tags_str = p.get("tags") or ""
+            tags_list = [t.strip() for t in tags_str.split(",") if t.strip()]
             products.append(
                 {
-                    "id": n["id"],
-                    "variant_id": v["id"],
-                    "title": n.get("title") or "Untitled Product",
+                    "id": f"gid://shopify/Product/{pid}",
+                    "variant_id": f"gid://shopify/ProductVariant/{vid}",
+                    "title": p.get("title") or "Untitled Product",
                     "sku": sku,
                     "badge": badge,
                     "color": AVATAR_COLORS[idx % len(AVATAR_COLORS)],
@@ -127,18 +239,17 @@ class ShopifyGraphQLClient:
                     "compare_at_price": cmp_val,
                     "original_price": price_val,
                     "original_compare_at_price": cmp_val,
-                    "inventory": int(n.get("totalInventory") or 0),
+                    "inventory": sum(int(vr.get("inventory_quantity") or 0) for vr in variants),
                     "tags": tags_list,
                     "original_tags": list(tags_list),
                     "on_sale": cmp_val is not None and cmp_val > price_val,
                 }
             )
-
         return {
-            "id": collection_id.split("/")[-1],
-            "gid": col.get("id", gid),
-            "title": col.get("title") or f"Collection #{collection_id}",
-            "handle": col.get("handle") or "",
+            "id": numeric_id,
+            "gid": f"gid://shopify/Collection/{numeric_id}",
+            "title": col_obj.get("title") or f"Collection #{numeric_id}",
+            "handle": col_obj.get("handle") or "",
             "products": products,
         }
 
@@ -224,6 +335,31 @@ class ShopifyGraphQLClient:
             synced_count += 1
         return synced_count
 
+    async def get_billing_info(self) -> Dict[str, Any]:
+        query = """
+        query GetBillingInfo {
+          currentAppInstallation {
+            app {
+              handle
+            }
+            activeSubscriptions {
+              id
+              name
+              status
+              test
+              trialDays
+            }
+          }
+        }
+        """
+        data = await self.execute(query)
+        inst = data.get("currentAppInstallation") or {}
+        app_info = inst.get("app") or {}
+        return {
+            "app_handle": app_info.get("handle") or "",
+            "active_subscriptions": inst.get("activeSubscriptions") or [],
+        }
+
     async def create_subscription(
         self,
         return_url: str,
@@ -245,6 +381,7 @@ class ShopifyGraphQLClient:
             returnUrl: $returnUrl,
             trialDays: $trialDays,
             test: $test,
+            replacementBehavior: APPLY_IMMEDIATELY,
             lineItems: $lineItems
           ) {
             userErrors {
@@ -276,3 +413,31 @@ class ShopifyGraphQLClient:
             ],
         }
         return await self.execute(mutation, variables)
+
+    async def cancel_active_subscriptions(self) -> List[str]:
+        info = await self.get_billing_info()
+        cancelled_ids: List[str] = []
+        mutation = """
+        mutation AppSubscriptionCancel($id: ID!) {
+          appSubscriptionCancel(id: $id) {
+            appSubscription {
+              id
+              status
+            }
+            userErrors {
+              field
+              message
+            }
+          }
+        }
+        """
+        for sub in info.get("active_subscriptions") or []:
+            sub_id = sub.get("id")
+            if not sub_id:
+                continue
+            try:
+                await self.execute(mutation, {"id": sub_id})
+                cancelled_ids.append(sub_id)
+            except Exception:
+                continue
+        return cancelled_ids

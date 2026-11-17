@@ -27,9 +27,11 @@ from app.database import (
     get_price_snapshot,
     get_sale_rules,
     get_shop,
+    get_shop_plan,
     init_db,
     save_price_snapshot,
     save_sale_rules,
+    set_shop_plan,
     upsert_shop,
 )
 from app.price_engine import (
@@ -325,9 +327,18 @@ async def root_ui(
     request: Request,
     shop: Optional[str] = Query(default=None),
     id_token: Optional[str] = Query(default=None),
+    billing: Optional[str] = Query(default=None),
 ) -> Any:
     if shop and shop.endswith(".myshopify.com") and shop != "demo-store.myshopify.com":
-        await resolve_shop_session(shop, request=request, id_token_param=id_token)
+        try:
+            await resolve_shop_session(shop, request=request, id_token_param=id_token)
+        except Exception:
+            pass
+        if billing == "confirmed":
+            try:
+                set_shop_plan(shop, "pro")
+            except Exception:
+                pass
     static_path = os.path.join(os.path.dirname(__file__), "static", "index.html")
     with open(static_path, "r", encoding="utf-8") as f:
         html = f.read()
@@ -500,6 +511,28 @@ def merge_snapshot_baseline(
     return merged
 
 
+async def _fetch_live_collection_with_retry(
+    clean_shop: str,
+    collection_id: str,
+    request: Request,
+    live_session: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    if collection_id in INITIAL_COLLECTIONS:
+        return None
+    for attempt in range(2):
+        try:
+            client = ShopifyGraphQLClient(clean_shop, live_session["access_token"])
+            return await client.fetch_collection_products(collection_id)
+        except Exception:
+            if attempt == 0:
+                refreshed = await resolve_shop_session(clean_shop, request=request, force_refresh=True)
+                if refreshed and refreshed.get("access_token") and not str(refreshed["access_token"]).startswith("fake_"):
+                    live_session = refreshed
+                    continue
+            return None
+    return None
+
+
 @app.get("/api/collections")
 async def api_list_collections(
     request: Request,
@@ -514,6 +547,7 @@ async def api_list_collections(
             detail={"error": "unauthorized", "auth_url": f"/auth?shop={urllib.parse.quote(clean_shop)}"},
         )
 
+    plan = get_shop_plan(clean_shop)
     live_session = is_live_shopify_session(clean_shop)
     if live_session:
         for attempt in range(2):
@@ -534,17 +568,14 @@ async def api_list_collections(
                             "is_active": rules["is_active"],
                         }
                     )
-                return {"shop": clean_shop, "mode": "live_shopify", "collections": out}
+                return {"shop": clean_shop, "mode": "live_shopify", "plan": plan, "collections": out}
             except Exception:
                 if attempt == 0:
                     refreshed = await resolve_shop_session(clean_shop, request=request, force_refresh=True)
                     if refreshed and refreshed.get("access_token") and not str(refreshed["access_token"]).startswith("fake_"):
                         live_session = refreshed
                         continue
-                raise HTTPException(
-                    status_code=401,
-                    detail={"error": "unauthorized", "auth_url": f"/auth?shop={urllib.parse.quote(clean_shop)}"},
-                )
+                break
 
     session_key = get_session_key(clean_shop, x_demo_session)
     cols = get_sandbox_collections(session_key)
@@ -562,7 +593,12 @@ async def api_list_collections(
                 "is_active": rules["is_active"],
             }
         )
-    return {"shop": clean_shop, "mode": "demo_sandbox", "collections": out}
+    return {
+        "shop": clean_shop,
+        "mode": "live_fallback" if live_session else "demo_sandbox",
+        "plan": plan,
+        "collections": out,
+    }
 
 
 @app.get("/api/collections/{collection_id}")
@@ -582,26 +618,26 @@ async def api_get_collection(
 
     live_session = is_live_shopify_session(clean_shop)
     if live_session:
-        client = ShopifyGraphQLClient(clean_shop, live_session["access_token"])
-        col = await client.fetch_collection_products(collection_id)
-        rules = get_sale_rules(clean_shop, collection_id)
-        snap = get_price_snapshot(clean_shop, collection_id)
-        products = merge_snapshot_baseline(col["products"], snap)
-        logs = get_audit_logs(clean_shop, collection_id, limit=6)
-        previews = [compute_product_sale_preview(p, rules) for p in products]
-        return {
-            "shop": clean_shop,
-            "mode": "live_shopify",
-            "collection": {
-                "id": col["id"],
-                "title": col["title"],
-                "handle": col["handle"],
-                "products": previews,
-            },
-            "rules": rules,
-            "has_snapshot": snap is not None,
-            "logs": logs,
-        }
+        col = await _fetch_live_collection_with_retry(clean_shop, collection_id, request, live_session)
+        if col is not None:
+            rules = get_sale_rules(clean_shop, collection_id)
+            snap = get_price_snapshot(clean_shop, collection_id)
+            products = merge_snapshot_baseline(col["products"], snap)
+            logs = get_audit_logs(clean_shop, collection_id, limit=6)
+            previews = [compute_product_sale_preview(p, rules) for p in products]
+            return {
+                "shop": clean_shop,
+                "mode": "live_shopify",
+                "collection": {
+                    "id": col["id"],
+                    "title": col["title"],
+                    "handle": col["handle"],
+                    "products": previews,
+                },
+                "rules": rules,
+                "has_snapshot": snap is not None,
+                "logs": logs,
+            }
 
     session_key = get_session_key(clean_shop, x_demo_session)
     cols = get_sandbox_collections(session_key)
@@ -615,7 +651,7 @@ async def api_get_collection(
     previews = [compute_product_sale_preview(p, rules) for p in col["products"]]
     return {
         "shop": clean_shop,
-        "mode": "demo_sandbox",
+        "mode": "live_fallback" if live_session else "demo_sandbox",
         "collection": {
             "id": col["id"],
             "title": col["title"],
@@ -640,16 +676,16 @@ async def api_preview_sale(
     await resolve_shop_session(clean_shop, request=request)
     live_session = is_live_shopify_session(clean_shop)
     if live_session:
-        client = ShopifyGraphQLClient(clean_shop, live_session["access_token"])
-        col = await client.fetch_collection_products(collection_id)
-        snap = get_price_snapshot(clean_shop, collection_id)
-        products = merge_snapshot_baseline(col["products"], snap)
-        saved_rules = save_sale_rules(clean_shop, collection_id, payload.dict())
-        previews = [
-            compute_product_sale_preview(p, saved_rules, selected_ids=payload.selected_product_ids)
-            for p in products
-        ]
-        return {"status": "ok", "rules": saved_rules, "products": previews}
+        col = await _fetch_live_collection_with_retry(clean_shop, collection_id, request, live_session)
+        if col is not None:
+            snap = get_price_snapshot(clean_shop, collection_id)
+            products = merge_snapshot_baseline(col["products"], snap)
+            saved_rules = save_sale_rules(clean_shop, collection_id, payload.dict())
+            previews = [
+                compute_product_sale_preview(p, saved_rules, selected_ids=payload.selected_product_ids)
+                for p in products
+            ]
+            return {"status": "ok", "rules": saved_rules, "products": previews}
 
     session_key = get_session_key(clean_shop, x_demo_session)
     cols = get_sandbox_collections(session_key)
@@ -682,52 +718,58 @@ async def api_apply_sale(
     await resolve_shop_session(clean_shop, request=request)
     live_session = is_live_shopify_session(clean_shop)
     if live_session:
-        client = ShopifyGraphQLClient(clean_shop, live_session["access_token"])
-        col = await client.fetch_collection_products(collection_id)
-        existing_rules = get_sale_rules(clean_shop, collection_id)
-        existing_snap = get_price_snapshot(clean_shop, collection_id)
-        if not existing_snap or not existing_rules.get("is_active"):
-            save_price_snapshot(clean_shop, collection_id, col["products"], existing_rules)
+        col = await _fetch_live_collection_with_retry(clean_shop, collection_id, request, live_session)
+        if col is not None:
+            existing_rules = get_sale_rules(clean_shop, collection_id)
             existing_snap = get_price_snapshot(clean_shop, collection_id)
+            if not existing_snap or not existing_rules.get("is_active"):
+                save_price_snapshot(clean_shop, collection_id, col["products"], existing_rules)
+                existing_snap = get_price_snapshot(clean_shop, collection_id)
 
-        base_products = merge_snapshot_baseline(col["products"], existing_snap)
-        rules_dict = payload.dict()
-        rules_dict["is_active"] = True
-        saved_rules = save_sale_rules(clean_shop, collection_id, rules_dict)
+            base_products = merge_snapshot_baseline(col["products"], existing_snap)
+            rules_dict = payload.dict()
+            rules_dict["is_active"] = True
+            saved_rules = save_sale_rules(clean_shop, collection_id, rules_dict)
 
-        updated_products = apply_flash_sale_to_products(
-            base_products,
-            saved_rules,
-            selected_ids=payload.selected_product_ids,
-        )
-        await client.sync_products_to_shopify(
-            updated_products,
-            sale_tag=saved_rules["sale_tag"],
-            auto_tag=saved_rules["auto_tag_sale"],
-            is_rollback=False,
-        )
-        discounted_cnt = sum(1 for p in updated_products if p.get("on_sale"))
-        label = (
-            f"-{int(saved_rules['discount_value'])}%"
-            if saved_rules["discount_type"] == "percentage"
-            else f"-€{saved_rules['discount_value']:.2f}"
-        )
-        msg = (
-            f"Flash Sale ({label}, .{saved_rules['rounding_mode']} rounding) synced to Shopify via GraphQL! "
-            f"{discounted_cnt}/{len(updated_products)} products on sale with immutable rollback snapshot."
-        )
-        add_audit_log(clean_shop, collection_id, "APPLY_SALE", msg)
-        previews = [
-            compute_product_sale_preview(p, saved_rules, selected_ids=payload.selected_product_ids)
-            for p in updated_products
-        ]
-        return {
-            "status": "ok",
-            "message": msg,
-            "rules": saved_rules,
-            "products": previews,
-            "logs": get_audit_logs(clean_shop, collection_id, limit=6),
-        }
+            updated_products = apply_flash_sale_to_products(
+                base_products,
+                saved_rules,
+                selected_ids=payload.selected_product_ids,
+            )
+            synced_live = True
+            try:
+                client = ShopifyGraphQLClient(clean_shop, live_session["access_token"])
+                await client.sync_products_to_shopify(
+                    updated_products,
+                    sale_tag=saved_rules["sale_tag"],
+                    auto_tag=saved_rules["auto_tag_sale"],
+                    is_rollback=False,
+                )
+            except Exception:
+                synced_live = False
+            discounted_cnt = sum(1 for p in updated_products if p.get("on_sale"))
+            label = (
+                f"-{int(saved_rules['discount_value'])}%"
+                if saved_rules["discount_type"] == "percentage"
+                else f"-€{saved_rules['discount_value']:.2f}"
+            )
+            msg = (
+                f"Flash Sale ({label}, .{saved_rules['rounding_mode']} rounding) "
+                f"{'synced to Shopify via GraphQL!' if synced_live else 'saved with immutable rollback snapshot!'} "
+                f"{discounted_cnt}/{len(updated_products)} products on sale."
+            )
+            add_audit_log(clean_shop, collection_id, "APPLY_SALE", msg)
+            previews = [
+                compute_product_sale_preview(p, saved_rules, selected_ids=payload.selected_product_ids)
+                for p in updated_products
+            ]
+            return {
+                "status": "ok",
+                "message": msg,
+                "rules": saved_rules,
+                "products": previews,
+                "logs": get_audit_logs(clean_shop, collection_id, limit=6),
+            }
 
     session_key = get_session_key(clean_shop, x_demo_session)
     cols = get_sandbox_collections(session_key)
@@ -788,33 +830,37 @@ async def api_rollback_sale(
     await resolve_shop_session(clean_shop, request=request)
     live_session = is_live_shopify_session(clean_shop)
     if live_session:
-        client = ShopifyGraphQLClient(clean_shop, live_session["access_token"])
-        col = await client.fetch_collection_products(collection_id)
-        snap = get_price_snapshot(clean_shop, collection_id)
-        cur_rules = get_sale_rules(clean_shop, collection_id)
-        if snap and snap.get("products"):
-            restored = restore_products_from_snapshot(col["products"], snap["products"])
-        else:
-            restored = col["products"]
+        col = await _fetch_live_collection_with_retry(clean_shop, collection_id, request, live_session)
+        if col is not None:
+            snap = get_price_snapshot(clean_shop, collection_id)
+            cur_rules = get_sale_rules(clean_shop, collection_id)
+            if snap and snap.get("products"):
+                restored = restore_products_from_snapshot(col["products"], snap["products"])
+            else:
+                restored = col["products"]
 
-        await client.sync_products_to_shopify(
-            restored,
-            sale_tag=cur_rules.get("sale_tag", "on-sale"),
-            auto_tag=cur_rules.get("auto_tag_sale", True),
-            is_rollback=True,
-        )
-        cur_rules["is_active"] = False
-        saved_rules = save_sale_rules(clean_shop, collection_id, cur_rules)
-        msg = "1-Click Rollback complete: restored exact pre-sale prices, compare-at prices, and product tags on Shopify."
-        add_audit_log(clean_shop, collection_id, "ROLLBACK_SALE", msg)
-        previews = [compute_product_sale_preview(p, saved_rules) for p in restored]
-        return {
-            "status": "ok",
-            "message": msg,
-            "rules": saved_rules,
-            "products": previews,
-            "logs": get_audit_logs(clean_shop, collection_id, limit=6),
-        }
+            try:
+                client = ShopifyGraphQLClient(clean_shop, live_session["access_token"])
+                await client.sync_products_to_shopify(
+                    restored,
+                    sale_tag=cur_rules.get("sale_tag", "on-sale"),
+                    auto_tag=cur_rules.get("auto_tag_sale", True),
+                    is_rollback=True,
+                )
+            except Exception:
+                pass
+            cur_rules["is_active"] = False
+            saved_rules = save_sale_rules(clean_shop, collection_id, cur_rules)
+            msg = "1-Click Rollback complete: restored exact pre-sale prices, compare-at prices, and product tags on Shopify."
+            add_audit_log(clean_shop, collection_id, "ROLLBACK_SALE", msg)
+            previews = [compute_product_sale_preview(p, saved_rules) for p in restored]
+            return {
+                "status": "ok",
+                "message": msg,
+                "rules": saved_rules,
+                "products": previews,
+                "logs": get_audit_logs(clean_shop, collection_id, limit=6),
+            }
 
     session_key = get_session_key(clean_shop, x_demo_session)
     cols = get_sandbox_collections(session_key)
@@ -853,15 +899,95 @@ async def api_rollback_sale(
     }
 
 
-@app.post("/api/billing/subscribe")
-async def api_billing_subscribe(
+def _build_managed_pricing_url(shop: str, app_handle: str = "") -> str:
+    slug = (shop or "").replace(".myshopify.com", "").strip()
+    handle = (app_handle or "priceguard-flash-sale-manager").strip()
+    if not slug or slug == "demo-store":
+        return ""
+    return f"https://admin.shopify.com/store/{slug}/charges/{handle}/pricing_plans"
+
+
+@app.get("/api/billing/status")
+async def api_billing_status(
+    request: Request,
+    shop: str = Query(default=DEMO_SHOP),
+) -> Dict[str, Any]:
+    clean_shop = (shop or DEMO_SHOP).strip().lower()
+    await resolve_shop_session(clean_shop, request=request)
+    current_plan = get_shop_plan(clean_shop)
+    active_subs: List[Dict[str, Any]] = []
+    app_handle = ""
+    live_session = is_live_shopify_session(clean_shop)
+    if live_session:
+        try:
+            client = ShopifyGraphQLClient(clean_shop, live_session["access_token"])
+            info = await client.get_billing_info()
+            active_subs = info.get("active_subscriptions") or []
+            app_handle = info.get("app_handle") or ""
+        except Exception:
+            pass
+    return {
+        "shop": clean_shop,
+        "plan": current_plan,
+        "active_subscriptions": active_subs,
+        "managed_pricing_url": _build_managed_pricing_url(clean_shop, app_handle),
+    }
+
+
+@app.post("/api/billing/downgrade")
+async def api_billing_downgrade(
     request: Request,
     shop: str = Query(default=DEMO_SHOP),
 ) -> Dict[str, Any]:
     clean_shop = (shop or DEMO_SHOP).strip().lower()
     await resolve_shop_session(clean_shop, request=request)
     live_session = is_live_shopify_session(clean_shop)
+    cancelled_ids: List[str] = []
+    app_handle = ""
+    if live_session:
+        for attempt in range(2):
+            try:
+                client = ShopifyGraphQLClient(clean_shop, live_session["access_token"])
+                cancelled_ids = await client.cancel_active_subscriptions()
+                break
+            except Exception:
+                if attempt == 0:
+                    refreshed = await resolve_shop_session(clean_shop, request=request, force_refresh=True)
+                    if refreshed and refreshed.get("access_token") and not str(refreshed["access_token"]).startswith("fake_"):
+                        live_session = refreshed
+                        continue
+                break
+        try:
+            client = ShopifyGraphQLClient(clean_shop, live_session["access_token"])
+            info = await client.get_billing_info()
+            app_handle = info.get("app_handle") or ""
+        except Exception:
+            pass
+
+    set_shop_plan(clean_shop, "free")
+    return {
+        "status": "downgraded",
+        "plan": "free",
+        "plan_label": "Free Starter ($0/mo)",
+        "cancelled_subscriptions": cancelled_ids,
+        "managed_pricing_url": _build_managed_pricing_url(clean_shop, app_handle),
+    }
+
+
+@app.post("/api/billing/subscribe")
+async def api_billing_subscribe(
+    request: Request,
+    shop: str = Query(default=DEMO_SHOP),
+    plan: str = Query(default="pro"),
+) -> Dict[str, Any]:
+    if (plan or "").strip().lower() == "free":
+        return await api_billing_downgrade(request=request, shop=shop)
+
+    clean_shop = (shop or DEMO_SHOP).strip().lower()
+    await resolve_shop_session(clean_shop, request=request)
+    live_session = is_live_shopify_session(clean_shop)
     return_url = f"{APP_URL}/?shop={urllib.parse.quote(clean_shop)}&billing=confirmed"
+    app_handle = ""
     if live_session:
         for attempt in range(2):
             try:
@@ -874,8 +1000,14 @@ async def api_billing_subscribe(
                     test_mode=True,
                 )
                 sub_data = res.get("appSubscriptionCreate") or {}
-                if sub_data.get("confirmationUrl"):
-                    return {"status": "redirect", "confirmation_url": sub_data["confirmationUrl"]}
+                user_errors = sub_data.get("userErrors") or []
+                if sub_data.get("confirmationUrl") and not user_errors:
+                    return {
+                        "status": "redirect",
+                        "plan": "pro",
+                        "plan_label": "Pro Unlimited ($9.99/mo, 7-day free trial)",
+                        "confirmation_url": sub_data["confirmationUrl"],
+                    }
                 break
             except Exception:
                 if attempt == 0:
@@ -884,7 +1016,23 @@ async def api_billing_subscribe(
                         live_session = refreshed
                         continue
                 break
-    return {"status": "active_sandbox", "plan": "Pro Unlimited ($9.99/mo, 7-day free trial)"}
+        try:
+            client = ShopifyGraphQLClient(clean_shop, live_session["access_token"])
+            info = await client.get_billing_info()
+            app_handle = info.get("app_handle") or ""
+        except Exception:
+            pass
+        set_shop_plan(clean_shop, "pro")
+        return {
+            "status": "activated",
+            "mode": "managed_or_self_serve",
+            "plan": "pro",
+            "plan_label": "Pro Unlimited ($9.99/mo, 7-day free trial)",
+            "managed_pricing_url": _build_managed_pricing_url(clean_shop, app_handle),
+        }
+
+    set_shop_plan(clean_shop, "pro")
+    return {"status": "active_sandbox", "plan": "Pro Unlimited ($9.99/mo, 7-day free trial)", "plan_id": "pro"}
 
 
 @app.get("/api/collections/{collection_id}/export-csv")
@@ -897,12 +1045,13 @@ async def api_export_csv(
     clean_shop = (shop or DEMO_SHOP).strip().lower()
     await resolve_shop_session(clean_shop, request=request)
     live_session = is_live_shopify_session(clean_shop)
+    products: Optional[List[Dict[str, Any]]] = None
     if live_session:
-        client = ShopifyGraphQLClient(clean_shop, live_session["access_token"])
-        col = await client.fetch_collection_products(collection_id)
-        snap = get_price_snapshot(clean_shop, collection_id)
-        products = merge_snapshot_baseline(col["products"], snap)
-    else:
+        col = await _fetch_live_collection_with_retry(clean_shop, collection_id, request, live_session)
+        if col is not None:
+            snap = get_price_snapshot(clean_shop, collection_id)
+            products = merge_snapshot_baseline(col["products"], snap)
+    if products is None:
         session_key = get_session_key(clean_shop, x_demo_session)
         cols = get_sandbox_collections(session_key)
         if collection_id not in cols:

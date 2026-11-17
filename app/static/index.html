@@ -499,6 +499,60 @@
     .log-item:last-child {
       border-bottom: none;
     }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(26, 28, 29, 0.55);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 9000;
+      padding: 20px;
+    }
+    .modal-backdrop.is-open {
+      display: flex;
+    }
+    .modal-card {
+      background: #ffffff;
+      border-radius: 12px;
+      max-width: 720px;
+      width: 100%;
+      box-shadow: 0 20px 44px rgba(0, 0, 0, 0.24);
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    .modal-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #fafbfb;
+    }
+    .modal-body {
+      padding: 20px;
+    }
+    .plans-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 14px;
+      margin-top: 12px;
+    }
+    .plan-box {
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 12px;
+      background: #fff;
+    }
+    .plan-box.is-active {
+      border-color: var(--primary);
+      background: #f5fbf8;
+    }
   </style>
 </head>
 
@@ -512,7 +566,8 @@
       <span class="pill" id="shopPill">Shop: demo-store.myshopify.com</span>
       <span class="pill" id="campaignStatusPill">Status: Original Prices Active</span>
       <span class="pill pill--pro">Snapshot Rollback Shield Active</span>
-      <button type="button" class="pill pill--upgrade" id="proPlanBtn" onclick="subscribeProPlan()">&#9889; Pro Plan Active</button>
+      <button type="button" class="pill pill--upgrade" id="proPlanBtn" onclick="openBillingModal()">&#9889; Pro Plan ($9.99/mo)</button>
+      <button type="button" class="pill" style="cursor:pointer;border:1px solid #494d52;" onclick="openBillingModal()">Change Plan</button>
     </div>
   </div>
 
@@ -643,6 +698,56 @@
       <div class="logs-title">Price Snapshot &amp; Sync Activity Log</div>
       <div id="auditLogList">
         <div class="log-item">Immutable pre-sale snapshot active and ready.</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="billingModal" class="modal-backdrop" onclick="if (event.target === this) closeBillingModal()">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <strong style="font-size:16px;">Plans &amp; Billing — Self-Service Upgrade or Downgrade</strong>
+          <div style="font-size:12.5px;color:var(--subdued);margin-top:2px;">Switch plans anytime without contacting support or reinstalling.</div>
+        </div>
+        <button type="button" class="btn-sm" onclick="closeBillingModal()">&#10005; Close</button>
+      </div>
+      <div class="modal-body">
+        <div id="billingModalStatus" style="font-size:13px;color:var(--subdued);"></div>
+        <div class="plans-grid">
+          <div id="planCardFree" class="plan-box">
+            <div>
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <strong>Free Starter</strong>
+                <span id="planBadgeFree" class="badge badge--skip" style="display:none;">Current Plan</span>
+              </div>
+              <div style="font-size:22px;font-weight:800;margin:6px 0;">$0 <span style="font-size:12.5px;font-weight:500;color:var(--subdued);">/ month</span></div>
+              <div style="font-size:12.5px;color:var(--subdued);line-height:1.5;">
+                &#10003; 1 active collection flash sale<br/>
+                &#10003; Immutable pre-sale price snapshot<br/>
+                &#10003; 1-Click lossless rollback
+              </div>
+            </div>
+            <button type="button" id="btnSelectFree" class="btn" onclick="downgradeToFreePlan()">Switch to Free ($0/mo)</button>
+          </div>
+          <div id="planCardPro" class="plan-box is-active">
+            <div>
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <strong>Pro Unlimited</strong>
+                <span id="planBadgePro" class="badge badge--sale">Current Plan</span>
+              </div>
+              <div style="font-size:22px;font-weight:800;margin:6px 0;">$9.99 <span style="font-size:12.5px;font-weight:500;color:var(--subdued);">/ month · 7-day free trial</span></div>
+              <div style="font-size:12.5px;color:var(--subdued);line-height:1.5;">
+                &#10003; Unlimited collections &amp; variants<br/>
+                &#10003; Anti-double-discount anchor engine<br/>
+                &#10003; Psychological rounding (.99 / .95) &amp; floor guard
+              </div>
+            </div>
+            <button type="button" id="btnSelectPro" class="btn btn--primary" onclick="subscribeProPlan()">Upgrade to Pro ($9.99/mo)</button>
+          </div>
+        </div>
+        <div id="managedPricingLinkWrap" style="margin-top:12px;font-size:12.5px;display:none;">
+          <a id="managedPricingLink" href="#" target="_top" style="color:var(--primary);font-weight:600;">Open Shopify Hosted Plan Management &rarr;</a>
+        </div>
       </div>
     </div>
   </div>
@@ -855,11 +960,82 @@
       }).join("");
     }
 
-    async function subscribeProPlan() {
-      const btn = document.getElementById("proPlanBtn");
-      btn.disabled = true;
+    let currentPlan = "pro";
+
+    function renderPlanUI(planName, managedPricingUrl = "") {
+      currentPlan = (planName || "pro").toLowerCase() === "free" ? "free" : "pro";
+      const topBtn = document.getElementById("proPlanBtn");
+      if (topBtn) {
+        topBtn.textContent = currentPlan === "free"
+          ? "Plan: Free Starter ($0/mo)"
+          : "⚡ Pro Unlimited ($9.99/mo)";
+      }
+      const cardFree = document.getElementById("planCardFree");
+      const cardPro = document.getElementById("planCardPro");
+      const badgeFree = document.getElementById("planBadgeFree");
+      const badgePro = document.getElementById("planBadgePro");
+      const btnFree = document.getElementById("btnSelectFree");
+      const btnPro = document.getElementById("btnSelectPro");
+
+      if (cardFree && cardPro) {
+        if (currentPlan === "free") {
+          cardFree.classList.add("is-active");
+          cardPro.classList.remove("is-active");
+          if (badgeFree) badgeFree.style.display = "inline-flex";
+          if (badgePro) badgePro.style.display = "none";
+          if (btnFree) { btnFree.textContent = "✓ Current Plan (Free Starter)"; btnFree.disabled = true; }
+          if (btnPro) { btnPro.textContent = "Upgrade to Pro ($9.99/mo)"; btnPro.disabled = false; }
+        } else {
+          cardFree.classList.remove("is-active");
+          cardPro.classList.add("is-active");
+          if (badgeFree) badgeFree.style.display = "none";
+          if (badgePro) badgePro.style.display = "inline-flex";
+          if (btnFree) { btnFree.textContent = "Downgrade to Free ($0/mo)"; btnFree.disabled = false; }
+          if (btnPro) { btnPro.textContent = "✓ Current Plan (Pro Unlimited)"; btnPro.disabled = true; }
+        }
+      }
+      const linkWrap = document.getElementById("managedPricingLinkWrap");
+      const linkEl = document.getElementById("managedPricingLink");
+      if (linkWrap && linkEl) {
+        if (managedPricingUrl) {
+          linkEl.href = managedPricingUrl;
+          linkWrap.style.display = "block";
+        } else {
+          linkWrap.style.display = "none";
+        }
+      }
+    }
+
+    async function openBillingModal() {
+      const modal = document.getElementById("billingModal");
+      if (modal) modal.classList.add("is-open");
+      renderPlanUI(currentPlan);
       try {
-        const res = await authFetch(`/api/billing/subscribe?shop=${encodeURIComponent(currentShop)}`, {
+        const res = await authFetch(`/api/billing/status?shop=${encodeURIComponent(currentShop)}`);
+        if (res.ok) {
+          const data = await res.json();
+          renderPlanUI(data.plan || currentPlan, data.managed_pricing_url || "");
+          const st = document.getElementById("billingModalStatus");
+          if (st) {
+            st.textContent = `Active Plan for ${data.shop}: ${currentPlan === "free" ? "Free Starter ($0/mo)" : "Pro Unlimited ($9.99/mo · 7-day trial)"}`;
+          }
+        }
+      } catch (_) {}
+    }
+
+    function closeBillingModal() {
+      const modal = document.getElementById("billingModal");
+      if (modal) modal.classList.remove("is-open");
+    }
+
+    async function subscribeProPlan() {
+      const btn = document.getElementById("btnSelectPro") || document.getElementById("proPlanBtn");
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = "⏳ Connecting to Shopify Billing...";
+      }
+      try {
+        const res = await authFetch(`/api/billing/subscribe?shop=${encodeURIComponent(currentShop)}&plan=pro`, {
           method: "POST",
         });
         const data = await res.json();
@@ -876,36 +1052,61 @@
             a.click();
           } catch (_) {}
           if (window.top !== window.self) {
-            try { window.top.location.href = data.confirmation_url; } catch (_) { window.location.href = data.confirmation_url; }
+            try { window.top.location.href = data.confirmation_url; } catch (_) {}
           } else {
             window.location.href = data.confirmation_url;
           }
           return;
         }
-        showBanner("⚡ Active Plan: " + (data.plan || "Pro Unlimited ($9.99/mo, 7-day free trial)"));
-      } finally {
-        btn.disabled = false;
+        renderPlanUI("pro", data.managed_pricing_url || "");
+        closeBillingModal();
+        showBanner("⚡ Active Plan: " + (data.plan_label || data.plan || "Pro Unlimited ($9.99/mo, 7-day free trial)"));
+      } catch (_) {
+        renderPlanUI(currentPlan);
+      }
+    }
+
+    async function downgradeToFreePlan() {
+      const btn = document.getElementById("btnSelectFree");
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = "⏳ Switching to Free Starter...";
+      }
+      try {
+        const res = await authFetch(`/api/billing/downgrade?shop=${encodeURIComponent(currentShop)}`, {
+          method: "POST",
+        });
+        const data = await res.json();
+        renderPlanUI("free", data.managed_pricing_url || "");
+        closeBillingModal();
+        showBanner("✓ Plan downgraded to Free Starter ($0/mo). You can upgrade back to Pro anytime.");
+      } catch (_) {
+        renderPlanUI(currentPlan);
       }
     }
 
     async function loadCollectionsList() {
       const res = await authFetch(`/api/collections?shop=${encodeURIComponent(currentShop)}`);
-      if (res.status === 401 || !res.ok) {
+      if (res.status === 401) {
         if (currentShop !== "demo-store.myshopify.com") {
           let target = `/auth?shop=${encodeURIComponent(currentShop)}`;
           try {
             const err = await res.json();
             if (err && err.detail && err.detail.auth_url) target = err.detail.auth_url;
           } catch (_) {}
-          if (window.top !== window.self) {
-            window.top.location.href = target;
-          } else {
+          try { window.open(target, "_top"); } catch (_) {}
+          if (window.top === window.self) {
             window.location.href = target;
           }
           return false;
         }
       }
+      if (!res.ok) {
+        showBanner("Unable to load collections right now. Please refresh.");
+        return false;
+      }
       const data = await res.json();
+      if (data.plan) renderPlanUI(data.plan);
       const sel = document.getElementById("collectionSelect");
       const cols = data.collections || [];
       if (cols.length === 0) {
@@ -941,11 +1142,14 @@
       const res = await authFetch(`/api/collections/${encodeURIComponent(collectionId)}?shop=${encodeURIComponent(currentShop)}`);
       if (res.status === 401) {
         const target = `/auth?shop=${encodeURIComponent(currentShop)}`;
-        if (window.top !== window.self) {
-          window.top.location.href = target;
-        } else {
+        try { window.open(target, "_top"); } catch (_) {}
+        if (window.top === window.self) {
           window.location.href = target;
         }
+        return;
+      }
+      if (!res.ok) {
+        showBanner("Could not load collection products right now.");
         return;
       }
       const data = await res.json();
