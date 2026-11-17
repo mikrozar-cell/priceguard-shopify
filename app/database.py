@@ -141,9 +141,9 @@ def set_shop_plan(shop_domain: str, plan_status: str) -> None:
 def get_shop_plan(shop_domain: str) -> str:
     row = get_shop(shop_domain)
     if not row:
-        return "pro"
-    val = (row.get("plan_status") or "pro").strip().lower()
-    return "free" if val == "free" else "pro"
+        return "free"
+    val = (row.get("plan_status") or "free").strip().lower()
+    return "pro" if val == "pro" else "free"
 
 
 def delete_shop_data(shop_domain: str) -> None:

@@ -184,27 +184,31 @@ def test_resilient_fallback_and_billing_upgrade_downgrade():
     ):
         r_cols = client.get(f"/api/collections?shop={live_shop}")
         assert r_cols.status_code == 200
-        assert len(r_cols.json()["collections"]) >= 2
+        # Never show fake demo collections ("Summer Essentials 2026") on a real store
+        assert r_cols.json()["collections"] == []
+        assert r_cols.json()["plan"] == "free"
 
-        r_col = client.get(f"/api/collections/col-summer-2026?shop={live_shop}")
+        r_col = client.get(f"/api/collections/999999?shop={live_shop}")
         assert r_col.status_code == 200
-        assert len(r_col.json()["collection"]["products"]) >= 1
+        assert r_col.json()["collection"]["products"] == []
 
         r_sub = client.post(f"/api/billing/subscribe?shop={live_shop}&plan=pro")
         assert r_sub.status_code == 200
-        assert r_sub.json()["plan"] == "pro"
-
-        r_down = client.post(f"/api/billing/downgrade?shop={live_shop}")
-        assert r_down.status_code == 200
-        assert r_down.json()["plan"] == "free"
+        assert r_sub.json()["status"] == "redirect"
+        assert r_sub.json()["plan"] == "free"
+        assert "pricing_plans" in r_sub.json()["confirmation_url"]
 
         r_st = client.get(f"/api/billing/status?shop={live_shop}")
         assert r_st.status_code == 200
         assert r_st.json()["plan"] == "free"
 
-        r_reup = client.post(f"/api/billing/subscribe?shop={live_shop}&plan=pro")
-        assert r_reup.status_code == 200
-        assert r_reup.json()["plan"] == "pro"
+    with patch(
+        "app.shopify_client.ShopifyGraphQLClient.get_billing_info",
+        new=AsyncMock(return_value={"app_handle": "priceguard-flash-sale-manager", "active_subscriptions": [{"id": "gid://shopify/AppSubscription/2", "name": "Pro Unlimited", "status": "ACTIVE"}]}),
+    ):
+        r_st_pro = client.get(f"/api/billing/status?shop={live_shop}")
+        assert r_st_pro.status_code == 200
+        assert r_st_pro.json()["plan"] == "pro"
 
 
 if __name__ == "__main__":

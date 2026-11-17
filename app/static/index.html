@@ -960,10 +960,12 @@
       }).join("");
     }
 
-    let currentPlan = "pro";
+    let currentPlan = "free";
+    let activeSubscriptions = [];
 
-    function renderPlanUI(planName, managedPricingUrl = "") {
-      currentPlan = (planName || "pro").toLowerCase() === "free" ? "free" : "pro";
+    function renderPlanUI(planName, managedPricingUrl = "", subs = activeSubscriptions) {
+      currentPlan = (planName || "free").toLowerCase() === "pro" ? "pro" : "free";
+      activeSubscriptions = Array.isArray(subs) ? subs : [];
       const topBtn = document.getElementById("proPlanBtn");
       if (topBtn) {
         topBtn.textContent = currentPlan === "free"
@@ -1009,15 +1011,22 @@
     async function openBillingModal() {
       const modal = document.getElementById("billingModal");
       if (modal) modal.classList.add("is-open");
-      renderPlanUI(currentPlan);
+      renderPlanUI(currentPlan, "", activeSubscriptions);
       try {
         const res = await authFetch(`/api/billing/status?shop=${encodeURIComponent(currentShop)}`);
         if (res.ok) {
           const data = await res.json();
-          renderPlanUI(data.plan || currentPlan, data.managed_pricing_url || "");
+          renderPlanUI(data.plan || "free", data.managed_pricing_url || "", data.active_subscriptions || []);
           const st = document.getElementById("billingModalStatus");
           if (st) {
-            st.textContent = `Active Plan for ${data.shop}: ${currentPlan === "free" ? "Free Starter ($0/mo)" : "Pro Unlimited ($9.99/mo · 7-day trial)"}`;
+            const sub = (data.active_subscriptions || [])[0];
+            if (currentPlan === "pro" && sub) {
+              const exp = sub.currentPeriodEnd ? ` · Next billing/expiry: ${String(sub.currentPeriodEnd).split("T")[0]}` : "";
+              const trial = sub.trialDays ? ` · ${sub.trialDays}-day trial` : "";
+              st.textContent = `Active Subscription for ${data.shop}: ${sub.name || "Pro Unlimited"} (${sub.status || "ACTIVE"}${trial}${exp})`;
+            } else {
+              st.textContent = `Active Plan for ${data.shop}: ${currentPlan === "free" ? "Free Starter ($0/mo)" : "Pro Unlimited ($9.99/mo · 7-day trial)"}`;
+            }
           }
         }
       } catch (_) {}
@@ -1077,7 +1086,11 @@
           method: "POST",
         });
         const data = await res.json();
-        renderPlanUI("free", data.managed_pricing_url || "");
+        if (data.status === "redirect" && data.confirmation_url) {
+          try { window.open(data.confirmation_url, "_top"); } catch (_) {}
+          return;
+        }
+        renderPlanUI("free", data.managed_pricing_url || "", []);
         closeBillingModal();
         showBanner("✓ Plan downgraded to Free Starter ($0/mo). You can upgrade back to Pro anytime.");
       } catch (_) {
@@ -1106,7 +1119,7 @@
         return false;
       }
       const data = await res.json();
-      if (data.plan) renderPlanUI(data.plan);
+      renderPlanUI(data.plan || "free", data.managed_pricing_url || "", data.active_subscriptions || []);
       const sel = document.getElementById("collectionSelect");
       const cols = data.collections || [];
       if (cols.length === 0) {
