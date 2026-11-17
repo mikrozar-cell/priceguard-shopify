@@ -219,6 +219,39 @@
       border: 1px solid #b3d9a8;
     }
 
+    .roi-strip {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .roi-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 13px 16px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    }
+
+    .roi-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--subdued);
+    }
+
+    .roi-value {
+      font-size: 18px;
+      font-weight: 700;
+      margin: 4px 0 2px;
+      color: var(--text);
+    }
+
+    .roi-meta {
+      font-size: 11.5px;
+      color: var(--subdued);
+    }
+
     .rules-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -596,6 +629,36 @@
       </div>
 
       <div class="banner" id="statusBanner"></div>
+      <div class="banner" id="reviewPromptBanner" style="display:none;background:#eef6ff;color:#202223;border:1px solid #b8dafe;align-items:center;justify-content:space-between;gap:12px;">
+        <span>&#10024; <strong>Flash Sale synced to Shopify!</strong> Saving time with PriceGuard? Leave a quick 10-second review on the Shopify App Store.</span>
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+          <a id="reviewAppStoreLink" href="https://apps.shopify.com/priceguard-flash-sale-manager#modal-show=WriteReviewModal" target="_top" class="btn btn--primary btn-sm" style="text-decoration:none;">&#9733; Rate in 10 seconds</a>
+          <button type="button" class="btn-sm" onclick="dismissReviewBanner()">Dismiss</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="roiMetricsStrip" class="roi-strip">
+      <div class="roi-card">
+        <div class="roi-label">Active Collection Sales</div>
+        <div class="roi-value" id="roiActiveSalesCount">0 / 0</div>
+        <div class="roi-meta" id="roiSalesPlanNote">Free Starter: 1 active sale</div>
+      </div>
+      <div class="roi-card">
+        <div class="roi-label">Products Discounted in View</div>
+        <div class="roi-value" id="roiDiscountedCount">0 / 0</div>
+        <div class="roi-meta">Live compare-at-price active</div>
+      </div>
+      <div class="roi-card">
+        <div class="roi-label">Margin Floor Protected</div>
+        <div class="roi-value" id="roiFloorProtectedCount">0 items</div>
+        <div class="roi-meta">Blocked from below-cost discounts</div>
+      </div>
+      <div class="roi-card">
+        <div class="roi-label">Anti-Double-Discount Shield</div>
+        <div class="roi-value" id="roiSnapshotStatus">Original Snapshot Ready</div>
+        <div class="roi-meta">Pre-sale anchor prices preserved</div>
+      </div>
     </div>
 
     <div class="rules-grid">
@@ -712,6 +775,7 @@
         <button type="button" class="btn-sm" onclick="closeBillingModal()">&#10005; Close</button>
       </div>
       <div class="modal-body">
+        <div id="billingUpgradeReason" style="display:none;margin-bottom:12px;padding:10px 12px;border-radius:6px;background:#fff8e6;border:1px solid #eec200;color:#8a6116;font-size:12.5px;font-weight:500;"></div>
         <div id="billingModalStatus" style="font-size:13px;color:var(--subdued);"></div>
         <div class="plans-grid">
           <div id="planCardFree" class="plan-box">
@@ -803,6 +867,40 @@
     let currentCollectionId = "col-summer-2026";
     let currentProducts = [];
     let selectedProductIds = new Set();
+    let collectionsList = [];
+    let currentAppHandle = "priceguard-flash-sale-manager";
+
+    function updateRoiStrip() {
+      const salesCountEl = document.getElementById("roiActiveSalesCount");
+      const salesNoteEl = document.getElementById("roiSalesPlanNote");
+      const discCountEl = document.getElementById("roiDiscountedCount");
+      const floorEl = document.getElementById("roiFloorProtectedCount");
+      const activeCols = collectionsList.filter(c => c.is_active).length;
+      if (salesCountEl) salesCountEl.textContent = `${activeCols} / ${collectionsList.length}`;
+      if (salesNoteEl) {
+        salesNoteEl.textContent = currentPlan === "pro"
+          ? "Pro Unlimited: Concurrent sales unlocked"
+          : "Free Starter: 1 active sale";
+      }
+      const discountedCount = currentProducts.filter(p => p.on_sale).length;
+      const floorCount = currentProducts.filter(p => p.floor_applied).length;
+      if (discCountEl) discCountEl.textContent = `${discountedCount} / ${currentProducts.length}`;
+      if (floorEl) floorEl.textContent = `${floorCount} item${floorCount === 1 ? "" : "s"}`;
+    }
+
+    function maybeShowReviewPrompt() {
+      try {
+        if (localStorage.getItem("priceguard_review_dismissed") === "1") return;
+      } catch (_) {}
+      const el = document.getElementById("reviewPromptBanner");
+      if (el) el.style.display = "flex";
+    }
+
+    function dismissReviewBanner() {
+      try { localStorage.setItem("priceguard_review_dismissed", "1"); } catch (_) {}
+      const el = document.getElementById("reviewPromptBanner");
+      if (el) el.style.display = "none";
+    }
 
     async function authFetch(url, options = {}) {
       const headers = new Headers(options.headers || {});
@@ -884,6 +982,7 @@
 
     function renderProducts(products) {
       currentProducts = products;
+      updateRoiStrip();
       const tbody = document.getElementById("productTableBody");
       const saleTag = (document.getElementById("saleTag").value || "on-sale").trim();
 
@@ -1006,11 +1105,22 @@
           linkWrap.style.display = "none";
         }
       }
+      updateRoiStrip();
     }
 
-    async function openBillingModal() {
+    async function openBillingModal(reason = "") {
       const modal = document.getElementById("billingModal");
       if (modal) modal.classList.add("is-open");
+      const reasonEl = document.getElementById("billingUpgradeReason");
+      if (reasonEl) {
+        if (reason) {
+          reasonEl.textContent = reason;
+          reasonEl.style.display = "block";
+        } else {
+          reasonEl.textContent = "";
+          reasonEl.style.display = "none";
+        }
+      }
       renderPlanUI(currentPlan, "", activeSubscriptions);
       try {
         const res = await authFetch(`/api/billing/status?shop=${encodeURIComponent(currentShop)}`);
@@ -1119,9 +1229,15 @@
         return false;
       }
       const data = await res.json();
+      collectionsList = data.collections || [];
+      currentAppHandle = data.app_handle || "priceguard-flash-sale-manager";
+      const reviewLinkEl = document.getElementById("reviewAppStoreLink");
+      if (reviewLinkEl) {
+        reviewLinkEl.href = `https://apps.shopify.com/${encodeURIComponent(currentAppHandle)}#modal-show=WriteReviewModal`;
+      }
       renderPlanUI(data.plan || "free", data.managed_pricing_url || "", data.active_subscriptions || []);
       const sel = document.getElementById("collectionSelect");
-      const cols = data.collections || [];
+      const cols = collectionsList;
       if (cols.length === 0) {
         sel.innerHTML = `<option value="">No collections found in ${currentShop}</option>`;
         document.getElementById("productTableBody").innerHTML = `
@@ -1215,6 +1331,13 @@
 
     async function applySale() {
       const btn = document.getElementById("applyBtn");
+      if (currentShop !== "demo-store.myshopify.com" && currentPlan === "free") {
+        const otherActive = collectionsList.some(c => c.is_active && c.id !== currentCollectionId);
+        if (otherActive) {
+          openBillingModal("Free Starter includes 1 active collection flash sale at a time. Upgrade to Pro Unlimited ($9.99/mo · 7-day free trial) to run concurrent flash sales across unlimited collections!");
+          return;
+        }
+      }
       btn.disabled = true;
       try {
         const payload = readRulesFromForm();
@@ -1227,6 +1350,7 @@
         renderProducts(data.products);
         renderAuditLogs(data.logs);
         showBanner("✓ " + data.message);
+        maybeShowReviewPrompt();
         await loadCollectionsList();
       } finally {
         btn.disabled = false;

@@ -596,6 +596,7 @@ async def api_list_collections(
                     "shop": clean_shop,
                     "mode": "live_shopify",
                     "plan": billing_state["plan"],
+                    "app_handle": billing_state["app_handle"] or "priceguard-flash-sale-manager",
                     "active_subscriptions": billing_state["active_subscriptions"],
                     "managed_pricing_url": _build_managed_pricing_url(clean_shop, billing_state["app_handle"]),
                     "collections": out,
@@ -620,6 +621,7 @@ async def api_list_collections(
             "shop": clean_shop,
             "mode": "live_shopify",
             "plan": billing_state["plan"],
+            "app_handle": billing_state["app_handle"] or "priceguard-flash-sale-manager",
             "active_subscriptions": billing_state["active_subscriptions"],
             "managed_pricing_url": _build_managed_pricing_url(clean_shop, billing_state["app_handle"]),
             "warning": str(last_exc) if last_exc else None,
@@ -646,6 +648,7 @@ async def api_list_collections(
         "shop": clean_shop,
         "mode": "demo_sandbox",
         "plan": plan,
+        "app_handle": "priceguard-flash-sale-manager",
         "collections": out,
     }
 
