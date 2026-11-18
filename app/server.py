@@ -74,13 +74,10 @@ async def _render_keepalive_loop() -> None:
 
 
 @app.on_event("startup")
-def on_startup() -> None:
+async def on_startup() -> None:
     init_db()
     if os.environ.get("RENDER"):
-        try:
-            asyncio.get_running_loop().create_task(_render_keepalive_loop())
-        except RuntimeError:
-            pass
+        asyncio.create_task(_render_keepalive_loop())
 
 
 # ---------------------------------------------------------------------------
