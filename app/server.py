@@ -52,32 +52,11 @@ SCOPES = "read_products,write_products"
 app = FastAPI(title="PriceGuard Flash Sale Manager", version="1.0.0")
 
 _OAUTH_ATTEMPTED_SHOPS: Dict[str, float] = {}
-_KEEPALIVE_URLS = (
-    "https://sortflow-app.onrender.com/health",
-    "https://priceguard-app.onrender.com/health",
-    "https://cartlogic-app.onrender.com/health",
-)
-
-
-async def _render_keepalive_loop() -> None:
-    while True:
-        await asyncio.sleep(480)
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                for target_url in _KEEPALIVE_URLS:
-                    try:
-                        await client.get(target_url)
-                    except Exception:
-                        pass
-        except Exception:
-            pass
 
 
 @app.on_event("startup")
-async def on_startup() -> None:
+def on_startup() -> None:
     init_db()
-    if os.environ.get("RENDER"):
-        asyncio.create_task(_render_keepalive_loop())
 
 
 # ---------------------------------------------------------------------------
