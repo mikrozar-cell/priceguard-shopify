@@ -40,6 +40,22 @@ def test_embedded_app_bridge_head():
     res_api_unauth = client.get("/api/collections?shop=unauthenticated-real.myshopify.com")
     assert res_api_unauth.status_code == 401
 
+    # Embedded App Bridge / X-OAuth-Attempted requests must return 200 OK instead of entering 401 loop
+    res_api_embedded = client.get(
+        "/api/collections?shop=secnsk-ee.myshopify.com",
+        headers={"Authorization": "Bearer dummy.jwt.token"},
+    )
+    assert res_api_embedded.status_code == 200
+    assert res_api_embedded.json()["collections"] == []
+    assert res_api_embedded.json()["plan"] == "free"
+
+    res_api_attempted = client.get(
+        "/api/collections?shop=secnsk-ee.myshopify.com",
+        headers={"X-OAuth-Attempted": "1"},
+    )
+    assert res_api_attempted.status_code == 200
+    assert res_api_attempted.json()["collections"] == []
+
     from app.database import upsert_shop
     upsert_shop("sortflow-dev-store.myshopify.com", "fake_access_token")
     res = client.get("/?shop=sortflow-dev-store.myshopify.com")
@@ -201,6 +217,14 @@ def test_resilient_fallback_and_billing_upgrade_downgrade():
         r_st = client.get(f"/api/billing/status?shop={live_shop}")
         assert r_st.status_code == 200
         assert r_st.json()["plan"] == "free"
+
+    with patch(
+        "app.shopify_client.ShopifyGraphQLClient.list_collections",
+        new=AsyncMock(side_effect=RuntimeError("403 Forbidden: Access denied")),
+    ):
+        r_403 = client.get(f"/api/collections?shop={live_shop}", headers={"Authorization": "Bearer dummy.jwt.token"})
+        assert r_403.status_code == 200
+        assert r_403.json()["collections"] == []
 
     with patch(
         "app.shopify_client.ShopifyGraphQLClient.get_billing_info",
