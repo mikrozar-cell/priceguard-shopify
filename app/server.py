@@ -46,7 +46,7 @@ from app.shopify_client import ShopifyGraphQLClient
 _FALLBACK_SECRET = base64.b64decode(b"c2hwc3NfMGIxZmFlNjU0ZDdmMTUwOGVkOTUwMzg4YjM1ZGZjNzQ=").decode("utf-8")
 SHOPIFY_API_KEY = os.environ.get("SHOPIFY_API_KEY", "29501bda2d166fbcb917e600b79e168c")
 SHOPIFY_API_SECRET = os.environ.get("SHOPIFY_API_SECRET", _FALLBACK_SECRET)
-APP_URL = os.environ.get("APP_URL", "https://priceguard-app.onrender.com").rstrip("/")
+APP_URL = os.environ.get("APP_URL", "https://priceguard.cab2web.com").rstrip("/")
 SCOPES = "read_products,write_products"
 
 app = FastAPI(title="PriceGuard Flash Sale Manager", version="1.0.0")
